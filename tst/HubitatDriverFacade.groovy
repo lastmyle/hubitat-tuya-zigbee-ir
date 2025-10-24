@@ -53,6 +53,15 @@ class StubZigbeeHelper {
 
 class StringLog {
     StringWriter out = new StringWriter()
+
+    def error(String message) {
+        out.write("[error] ${message}\n")
+    }
+
+    def warn(String message) {
+        out.write("[warn] ${message}\n")
+    }
+
     def info(String message) {
         out.write("[info] ${message}\n")
     }

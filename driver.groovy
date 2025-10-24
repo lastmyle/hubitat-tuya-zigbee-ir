@@ -59,7 +59,7 @@ import java.util.concurrent.ConcurrentHashMap
 // I'm not sure what's necessary to make this syntax work in standard Groovy
 // BEGIN METADATA
 metadata {
-    definition (name: "Tuya Zigbee IR Remote Control", namespace: "hubitat.anasta.si", author: "Sean Anastasi <sean@anasta.si>") {
+    definition (name: "Lastmyle Tuya Zigbee IR Remote Control", namespace: "hubitat.anasta.si", author: "Sean Anastasi <sean@anasta.si>") {
         capability "PushableButton"
 
         command "learn", [
@@ -78,8 +78,40 @@ metadata {
         command "unmapButton", [
             [name: "Button*", type: "NUMBER", description: "Button number to unmap"]
         ]
-       
+
+        // HVAC App Interface Methods (called by HVAC Setup Wizard app)
+        command "setHvacConfig", [
+            [name: "Config JSON*", type: "JSON_OBJECT", description: "Set HVAC configuration from app"]
+        ]
+        command "clearHvacConfig", [
+            [name: "Description", type: "STRING", description: "Clear HVAC configuration"]
+        ]
+        command "learnIrCode", [
+            [name: "Callback", type: "STRING", description: "Learn IR code and return via callback"]
+        ]
+
+        // HVAC Runtime Commands
+        command "hvacTurnOff", [
+            [name: "Description", type: "STRING", description: "Turn off HVAC using configured model"]
+        ]
+        command "hvacRestoreState", [
+            [name: "Description", type: "STRING", description: "Restore HVAC to last known state"]
+        ]
+        command "hvacSendCommand", [
+            [name: "Mode*", type: "STRING", description: "Mode (cool/heat/fan_only)"],
+            [name: "Temperature*", type: "NUMBER", description: "Temperature (16-30)"],
+            [name: "Fan*", type: "STRING", description: "Fan speed (low/mid/high/auto)"]
+        ]
+
+        // Readonly HVAC Configuration Attributes
         attribute "lastLearnedCode", "STRING"
+        attribute "hvacManufacturer", "STRING"
+        attribute "hvacModel", "STRING"
+        attribute "hvacSmartIrId", "STRING"
+        attribute "hvacCurrentState", "STRING"
+        attribute "hvacOffCommand", "STRING"
+        attribute "hvacLastOnCommand", "STRING"
+        attribute "hvacConfigured", "STRING"
         
         // Note, my case says ZS06, but this is what Device Get Info tells me the fingerprint is
         fingerprint profileId: "0104", inClusters: "0000,0004,0005,0003,ED00,E004,0006", outClusters: "0019,000A", manufacturer: "_TZ3290_7v1k4vufotpowp9z", model: "TS1201", deviceJoinName: "Tuya Zigbee IR Remote Control"
@@ -201,6 +233,196 @@ def push(final BigDecimal button) {
     } else {
         sendCode(codeName)
     }
+}
+
+/*********
+ * HVAC APP INTERFACE METHODS
+ */
+
+/**
+ * Set HVAC configuration from the setup wizard app
+ * Called by: HVAC Setup Wizard app
+ *
+ * @param configJson Map containing:
+ *   - manufacturer: String (e.g., "Panasonic")
+ *   - model: String (e.g., "CS/CU-xxxx Series")
+ *   - smartIrId: String (e.g., "1020")
+ *   - offCommand: String (Base64 IR code for off)
+ *   - commands: Map of IR codes indexed by mode/temp/fan
+ */
+def setHvacConfig(final Map configJson) {
+    info "setHvacConfig(${configJson?.manufacturer} - ${configJson?.smartIrId})"
+
+    if (!configJson || !configJson.smartIrId) {
+        error "Invalid config: missing required fields"
+        return
+    }
+
+    // Store full configuration
+    state.hvacConfig = [
+        manufacturer: configJson.manufacturer,
+        model: configJson.model,
+        smartIrId: configJson.smartIrId,
+        offCommand: configJson.offCommand,
+        commands: configJson.commands ?: [:],
+        currentState: [mode: "off", temp: null, fan: null]
+    ]
+
+    // Update readonly attributes for display
+    doSendEvent(name: "hvacManufacturer", value: configJson.manufacturer ?: "Unknown")
+    doSendEvent(name: "hvacModel", value: configJson.model ?: "Unknown")
+    doSendEvent(name: "hvacSmartIrId", value: configJson.smartIrId)
+    doSendEvent(name: "hvacOffCommand", value: configJson.offCommand?.take(50) ?: "Not set")
+    doSendEvent(name: "hvacCurrentState", value: "OFF")
+    doSendEvent(name: "hvacConfigured", value: "Yes")
+    doSendEvent(name: "hvacLastOnCommand", value: "None")
+
+    info "HVAC configuration saved successfully"
+}
+
+/**
+ * Clear HVAC configuration
+ * Called by: HVAC Setup Wizard app (to start over)
+ */
+def clearHvacConfig(final String description) {
+    info "clearHvacConfig()"
+
+    state.hvacConfig = null
+
+    // Clear readonly attributes
+    doSendEvent(name: "hvacManufacturer", value: "Not configured")
+    doSendEvent(name: "hvacModel", value: "Not configured")
+    doSendEvent(name: "hvacSmartIrId", value: "Not configured")
+    doSendEvent(name: "hvacOffCommand", value: "Not configured")
+    doSendEvent(name: "hvacCurrentState", value: "Not configured")
+    doSendEvent(name: "hvacConfigured", value: "No")
+    doSendEvent(name: "hvacLastOnCommand", value: "Not configured")
+
+    info "HVAC configuration cleared"
+}
+
+/**
+ * Learn IR code for the app
+ * Called by: HVAC Setup Wizard app during setup
+ *
+ * The app will subscribe to the "lastLearnedCode" event to get the result
+ */
+def learnIrCode(final String callback) {
+    info "learnIrCode() - callback: ${callback}"
+
+    // Trigger learn mode - app will receive result via lastLearnedCode event
+    learn(callback)
+}
+
+/**
+ * Get current HVAC configuration
+ * Called by: HVAC Setup Wizard app
+ * @return Map of current configuration
+ */
+Map getHvacConfig() {
+    return state.hvacConfig
+}
+
+/*********
+ * HVAC RUNTIME COMMANDS
+ */
+
+/**
+ * Turn off HVAC using configured off command
+ */
+def hvacTurnOff(final String description) {
+    info "hvacTurnOff()"
+
+    if (state.hvacConfig == null || state.hvacConfig.offCommand == null) {
+        error "HVAC not configured. Please run HVAC Setup Wizard app first."
+        return
+    }
+
+    // Send the off command
+    sendCode(state.hvacConfig.offCommand)
+
+    // Update state
+    if (state.hvacConfig.currentState != null) {
+        state.hvacConfig.currentState.mode = "off"
+    } else {
+        state.hvacConfig.currentState = [mode: "off", temp: null, fan: null]
+    }
+
+    doSendEvent(name: "hvacCurrentState", value: "OFF")
+
+    info "HVAC turned off"
+}
+
+/**
+ * Restore HVAC to last known ON state
+ */
+def hvacRestoreState(final String description) {
+    info "hvacRestoreState()"
+
+    if (state.hvacConfig == null) {
+        error "HVAC not configured. Please run HVAC Setup Wizard app first."
+        return
+    }
+
+    // Get last ON command
+    final String lastOnCommand = device.currentValue("hvacLastOnCommand")
+    if (lastOnCommand == null || lastOnCommand == "None" || lastOnCommand == "Not configured") {
+        warn "No previous ON state to restore"
+        return
+    }
+
+    // Send the last ON command
+    sendCode(lastOnCommand)
+
+    doSendEvent(name: "hvacCurrentState", value: formatHvacState(state.hvacConfig.currentState))
+
+    info "HVAC state restored"
+}
+
+/**
+ * Send specific HVAC command (mode/temp/fan combination)
+ * Called by: Apps, Rule Machine, or manually
+ */
+def hvacSendCommand(final String mode, final BigDecimal temperature, final String fan) {
+    info "hvacSendCommand(mode: ${mode}, temp: ${temperature}, fan: ${fan})"
+
+    if (state.hvacConfig == null || state.hvacConfig.commands == null) {
+        error "HVAC not configured. Please run HVAC Setup Wizard app first."
+        return
+    }
+
+    // Look up IR code for this combination
+    final String irCode = state.hvacConfig.commands[mode]?.get(fan)?.get(temperature.toString())
+
+    if (irCode == null) {
+        error "No IR code found for mode:${mode} temp:${temperature} fan:${fan}"
+        return
+    }
+
+    // Send the command
+    sendCode(irCode)
+
+    // Update state
+    state.hvacConfig.currentState = [
+        mode: mode,
+        temp: temperature.toInteger(),
+        fan: fan
+    ]
+
+    doSendEvent(name: "hvacCurrentState", value: formatHvacState(state.hvacConfig.currentState))
+    doSendEvent(name: "hvacLastOnCommand", value: irCode.take(50))
+
+    info "HVAC command sent successfully"
+}
+
+/*********
+ * HVAC HELPER FUNCTIONS
+ */
+
+String formatHvacState(final Map hvacState) {
+    if (hvacState == null) return "Unknown"
+    if (hvacState.mode == "off") return "OFF"
+    return "${hvacState.mode?.toUpperCase()} ${hvacState.temp}°C Fan:${hvacState.fan?.toUpperCase()}"
 }
 
 /*********
