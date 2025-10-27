@@ -3,7 +3,6 @@ import static org.junit.Assert.*
 import org.junit.Test
 import org.junit.Before
 import org.junit.BeforeClass
-import java.nio.ByteBuffer
 
 /**
  * Tests for IR service classes (inlined in app.groovy)

@@ -32,7 +32,7 @@ class FastLZ {
      * @return Decompressed bytes
      * @throws IllegalArgumentException if data is corrupted or invalid
      */
-    static byte[] decompress(byte[] data) {
+    byte[] decompress(byte[] data) {
         if (!data || data.length == 0) {
             return new byte[0]
         }
@@ -100,7 +100,7 @@ class FastLZ {
      * @param data Raw bytes to compress
      * @return Compressed bytes
      */
-    static byte[] compress(byte[] data) {
+    byte[] compress(byte[] data) {
         if (!data || data.length == 0) {
             return new byte[0]
         }
@@ -204,8 +204,6 @@ class FastLZ {
  * Handles encoding and decoding between Tuya Base64 format and raw IR timings.
  */
 
-import java.nio.ByteBuffer
-
 class TuyaIRService {
 
     /**
@@ -220,7 +218,7 @@ class TuyaIRService {
      * @return List of microsecond timings [9000, 4500, 600, ...]
      * @throws IllegalArgumentException if the code is invalid or cannot be decoded
      */
-    static List<Integer> decodeTuyaIR(String tuyaCode) {
+    List<Integer> decodeTuyaIR(String tuyaCode) {
         try {
             // 1. Base64 decode
             byte[] compressed = tuyaCode.decodeBase64()
@@ -258,7 +256,7 @@ class TuyaIRService {
      * @return Base64 encoded Tuya IR code
      * @throws IllegalArgumentException if the timings are invalid
      */
-    static String encodeTuyaIR(List<Integer> timings) {
+    String encodeTuyaIR(List<Integer> timings) {
         try {
             // 1. Pack as 16-bit little-endian integers (manually to avoid ByteOrder restriction)
             byte[] rawBytes = new byte[timings.size() * 2]
@@ -293,7 +291,7 @@ class TuyaIRService {
      * @param tuyaCode String to validate
      * @return true if valid, false otherwise
      */
-    static boolean validateTuyaCode(String tuyaCode) {
+    boolean validateTuyaCode(String tuyaCode) {
         if (!tuyaCode || tuyaCode.trim().isEmpty()) {
             return false
         }
@@ -311,7 +309,7 @@ class TuyaIRService {
      * @param tuyaCode Base64 encoded Tuya IR code
      * @return Map with code information
      */
-    static Map getCodeInfo(String tuyaCode) {
+    Map getCodeInfo(String tuyaCode) {
         try {
             List<Integer> timings = decodeTuyaIR(tuyaCode)
 
@@ -405,7 +403,7 @@ class IRRemoteESP8266 {
 
     // Protocol definitions based on IRremoteESP8266
     // Timing values collected from real-world captures and library documentation
-    static final Map<String, IRProtocolTiming> PROTOCOLS = [
+    final Map<String, IRProtocolTiming> PROTOCOLS = [
         // Fujitsu AC protocols
         FUJITSU_AC: new IRProtocolTiming(
             "FUJITSU_AC",
@@ -644,7 +642,7 @@ class IRRemoteESP8266 {
      *   notes: "Standard Fujitsu AC protocol (ARRAH2E, AR-RAx series)"
      * ]
      */
-    static Map identifyProtocol(List<Integer> timings, double toleranceMultiplier = 1.5) {
+    Map identifyProtocol(List<Integer> timings, double toleranceMultiplier = 1.5) {
         if (!timings || timings.size() < 4) {
             return null
         }
@@ -686,7 +684,7 @@ class IRRemoteESP8266 {
      * @param protocolName Protocol name
      * @return Map with capabilities
      */
-    static Map getProtocolCapabilities(String protocolName) {
+    Map getProtocolCapabilities(String protocolName) {
         // Standard capabilities for most HVAC units
         return [
             modes: ["cool", "heat", "dry", "fan", "auto"],
@@ -701,7 +699,7 @@ class IRRemoteESP8266 {
      *
      * @return Sorted list of unique manufacturer names
      */
-    static List<String> getAllManufacturers() {
+    List<String> getAllManufacturers() {
         Set<String> manufacturers = new HashSet<>()
         PROTOCOLS.values().each { protocol ->
             manufacturers.addAll(protocol.manufacturer)
@@ -715,7 +713,7 @@ class IRRemoteESP8266 {
      * @param manufacturer Manufacturer name (case-insensitive)
      * @return List of protocol names
      */
-    static List<String> getProtocolsByManufacturer(String manufacturer) {
+    List<String> getProtocolsByManufacturer(String manufacturer) {
         String manufacturerLower = manufacturer.toLowerCase()
         List<String> protocols = []
 
@@ -734,7 +732,7 @@ class IRRemoteESP8266 {
      * @param protocolName Protocol name
      * @return IRProtocolTiming or null if not found
      */
-    static IRProtocolTiming getProtocol(String protocolName) {
+    IRProtocolTiming getProtocol(String protocolName) {
         return PROTOCOLS[protocolName]
     }
 }
@@ -963,7 +961,7 @@ class HVACCodeGenerator {
 
 definition(
     name: "Maestro HVAC Setup Wizard",
-    namespace: "hubitat.anasta.si",
+    namespace: "hubitat.lastmyle.maestr",
     author: "Lastmyle",
     description: "Configure HVAC IR remotes with automatic model detection",
     category: "Convenience",

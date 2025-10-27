@@ -10,13 +10,13 @@
  * struct data into a hex byte string according to a given struct layout definition.
  *
  * The learn and sendCode commands consist of a back-and-forth sequence of command messages between
- * the hub and the device. The names for these messages are not official and just guesses. 
+ * the hub and the device. The names for these messages are not official and just guesses.
  * Here's an outline of the flow:
  *
  * learn sequence:
  *  1. hub sends 0xe004 0x00 (learn) with the JSON {"study":0} (as an ASCII hex byte string)
  *  2. device led illuminates, user sends IR code to the device using original remote
- *  3. device sends 0xed00 0x00 (start transmit) with a sequence value it generates + the code length 
+ *  3. device sends 0xed00 0x00 (start transmit) with a sequence value it generates + the code length
  *     - All subsequent messages generally include this same sequence value
  *  4. hub sends 0xed00 0x01 (start transmit ack)
  *  5. device sends 0xed00 0x0B (ACK) with 0x01 as the command being acked
@@ -25,8 +25,8 @@
  *  [repeat (5) and (6) until the received data length matches the length given in (3)]
  *  8. hub sends 0xed00 0x04 (done sending)
  *  9. device sends 0xed00 0x05 (done receiving)
- *  10. hub sets "lastLearnedCode" (base64 value), 
- *      clears data associated with this sequence, 
+ *  10. hub sets "lastLearnedCode" (base64 value),
+ *      clears data associated with this sequence,
  *      and sends 0xe004 0x00 (learn) with the JSON {"study":1}
  *  11. device led turns off
  *
@@ -39,7 +39,7 @@
  *  4. hub sends 0xed00 0x03 (code data response) with a chunk of the code data and a crc checksum
  *  [repeat (3) and (4) until the device sends 0xed00 0x04 (done sendng)]
  *  5. device sends 0xed00 0x04 (done sending)
- *  6. hub sends 0xed00 0x05 (done receiving), 
+ *  6. hub sends 0xed00 0x05 (done receiving),
  *     clears data associated with this sequence
  *  7. device emits the IR code
  *
@@ -59,71 +59,75 @@ import java.util.concurrent.ConcurrentHashMap
 // I'm not sure what's necessary to make this syntax work in standard Groovy
 // BEGIN METADATA
 metadata {
-    definition (name: "Maestro Tuya Zigbee IR Remote Control", namespace: "hubitat.anasta.si", author: "Sean Anastasi <sean@anasta.si>") {
-        capability "PushableButton"
+    definition(
+        name: 'Maestro Tuya Zigbee IR Remote Control',
+        namespace: 'hubitat.lastmyle.maestro',
+        author: 'Lastmyle'
+        ) {
+        capability 'PushableButton'
 
-        command "learn", [
-            [name: "Code Name", type: "STRING", description: "Name for learned code (optional)"]
+        command 'learn', [
+            [name: 'Code Name', type: 'STRING', description: 'Name for learned code (optional)']
         ]
-        command "sendCode", [
-            [name: "Code*", type: "STRING", description: "Name of learned code or raw Base64 bytes of code to send"]
+        command 'sendCode', [
+            [name: 'Code*', type: 'STRING', description: 'Name of learned code or raw Base64 bytes of code to send']
         ]
-        command "forgetCode", [
-            [name: "Code Name*", type: "STRING", description: "Name of learned code to forget"]
+        command 'forgetCode', [
+            [name: 'Code Name*', type: 'STRING', description: 'Name of learned code to forget']
         ]
-        command "mapButton", [
-            [name: "Button*", type: "NUMBER", description: "Button number to map"],
-            [name: "Code Name*", type: "STRING", description: "Name of learned code to map to the given button"]
+        command 'mapButton', [
+            [name: 'Button*', type: 'NUMBER', description: 'Button number to map'],
+            [name: 'Code Name*', type: 'STRING', description: 'Name of learned code to map to the given button']
         ]
-        command "unmapButton", [
-            [name: "Button*", type: "NUMBER", description: "Button number to unmap"]
+        command 'unmapButton', [
+            [name: 'Button*', type: 'NUMBER', description: 'Button number to unmap']
         ]
 
         // HVAC App Interface Methods (called by HVAC Setup Wizard app)
-        command "setHvacConfig", [
-            [name: "Config JSON*", type: "JSON_OBJECT", description: "Set HVAC configuration from app"]
+        command 'setHvacConfig', [
+            [name: 'Config JSON*', type: 'JSON_OBJECT', description: 'Set HVAC configuration from app']
         ]
-        command "clearHvacConfig", [
-            [name: "Description", type: "STRING", description: "Clear HVAC configuration"]
+        command 'clearHvacConfig', [
+            [name: 'Description', type: 'STRING', description: 'Clear HVAC configuration']
         ]
-        command "learnIrCode", [
-            [name: "Callback", type: "STRING", description: "Learn IR code and return via callback"]
+        command 'learnIrCode', [
+            [name: 'Callback', type: 'STRING', description: 'Learn IR code and return via callback']
         ]
 
         // HVAC Runtime Commands
-        command "hvacTurnOff", [
-            [name: "Description", type: "STRING", description: "Turn off HVAC using configured model"]
+        command 'hvacTurnOff', [
+            [name: 'Description', type: 'STRING', description: 'Turn off HVAC using configured model']
         ]
-        command "hvacRestoreState", [
-            [name: "Description", type: "STRING", description: "Restore HVAC to last known state"]
+        command 'hvacRestoreState', [
+            [name: 'Description', type: 'STRING', description: 'Restore HVAC to last known state']
         ]
-        command "hvacSendCommand", [
-            [name: "Mode*", type: "STRING", description: "Mode (cool/heat/fan_only)"],
-            [name: "Temperature*", type: "NUMBER", description: "Temperature (16-30)"],
-            [name: "Fan*", type: "STRING", description: "Fan speed (low/mid/high/auto)"]
+        command 'hvacSendCommand', [
+            [name: 'Mode*', type: 'STRING', description: 'Mode (cool/heat/fan_only)'],
+            [name: 'Temperature*', type: 'NUMBER', description: 'Temperature (16-30)'],
+            [name: 'Fan*', type: 'STRING', description: 'Fan speed (low/mid/high/auto)']
         ]
 
         // Readonly HVAC Configuration Attributes
-        attribute "lastLearnedCode", "STRING"
-        attribute "hvacManufacturer", "STRING"
-        attribute "hvacModel", "STRING"
-        attribute "hvacSmartIrId", "STRING"
-        attribute "hvacCurrentState", "STRING"
-        attribute "hvacOffCommand", "STRING"
-        attribute "hvacLastOnCommand", "STRING"
-        attribute "hvacConfigured", "STRING"
-        
+        attribute 'lastLearnedCode', 'STRING'
+        attribute 'hvacManufacturer', 'STRING'
+        attribute 'hvacModel', 'STRING'
+        attribute 'hvacSmartIrId', 'STRING'
+        attribute 'hvacCurrentState', 'STRING'
+        attribute 'hvacOffCommand', 'STRING'
+        attribute 'hvacLastOnCommand', 'STRING'
+        attribute 'hvacConfigured', 'STRING'
+
         // Note, my case says ZS06, but this is what Device Get Info tells me the fingerprint is
-        fingerprint profileId: "0104", inClusters: "0000,0004,0005,0003,ED00,E004,0006", outClusters: "0019,000A", manufacturer: "_TZ3290_7v1k4vufotpowp9z", model: "TS1201", deviceJoinName: "Tuya Zigbee IR Remote Control"
-    }
+        fingerprint profileId: '0104', inClusters: '0000,0004,0005,0003,ED00,E004,0006', outClusters: '0019,000A', manufacturer: '_TZ3290_7v1k4vufotpowp9z', model: 'TS1201', deviceJoinName: 'Tuya Zigbee IR Remote Control'
+        }
 
     preferences {
-      input name: "logLevel", type: "enum", title: "Log Level", description: "Override logging level. Default is INFO.<br>DEBUG level will reset to INFO after 30 minutes", options: ["DEBUG","INFO","WARN","ERROR"], required: true, defaultValue: "INFO"
-   }
+        input name: 'logLevel', type: 'enum', title: 'Log Level', description: 'Override logging level. Default is INFO.<br>DEBUG level will reset to INFO after 30 minutes', options: ['DEBUG', 'INFO', 'WARN', 'ERROR'], required: true, defaultValue: 'INFO'
+    }
 }
 // END METADATA
 
-/* 
+/*
  * Semi-persistent data
  * We don't need this permanently in state, but we do need it between message executions so just @Field doesn't work
  */
@@ -145,25 +149,25 @@ def pendingReceiveSeqs() { return PENDING_RECEIVE_SEQS.computeIfAbsent(device.id
  */
 
 def installed() {
-    info "installed()"
+    info 'installed()'
 }
 
 def updated() {
-    info "updated()"
+    info 'updated()'
     switch (logLevel) {
-    case "DEBUG": 
-        debug "log level is DEBUG. Will reset to INFO after 30 minutes"
-        runIn(1800, "resetLogLevel")
-        break;
-    case "INFO": info "log level is INFO"; break;
-    case "WARN": warn "log level is WARN"; break;
-    case "ERROR": error "log level is ERROR"; break;
+    case 'DEBUG':
+            debug 'log level is DEBUG. Will reset to INFO after 30 minutes'
+            runIn(1800, 'resetLogLevel')
+            break
+    case 'INFO': info 'log level is INFO'; break;
+    case 'WARN': warn 'log level is WARN'; break;
+    case 'ERROR': error 'log level is ERROR'; break;
     default: error "Unexpected logLevel: ${logLevel}"
     }
 }
 
 def configure() {
-    info "configure()"
+    info 'configure()'
 }
 
 def learn(final String optionalCodeName) {
@@ -179,15 +183,15 @@ def sendCode(final String codeNameOrBase64CodeInput) {
     if (state.learnedCodes != null) {
         learnedCode = state.learnedCodes[codeNameOrBase64CodeInput]
     }
-    
+
     final String base64Code
     if (learnedCode != null) {
         base64Code = learnedCode
     } else {
         // Remove all whitespace since we added newlines to the lastLearnedCode attribute + the hubitat HTML might add extra spaces
-        base64Code = codeNameOrBase64CodeInput.replaceAll("\\s", "")
+        base64Code = codeNameOrBase64CodeInput.replaceAll('\\s', '')
     }
-    
+
     // JSON format copied from zigbee-herdsman-converters
     // Unclear if any of this can be tweaked to get different behavior
     final String jsonToSend = "{\"key_num\":1,\"delay\":300,\"key1\":{\"num\":1,\"freq\":38000,\"type\":1,\"key_code\":\"${base64Code}\"}}"
@@ -210,7 +214,7 @@ def forgetCode(final String codeName) {
 
 def mapButton(final BigDecimal button, final String codeName) {
     info "mappButton(${button}, ${codeName})"
-    final Map mappedButtons = state.computeIfAbsent("mappedButtons", {k -> new HashMap()})
+    final Map mappedButtons = state.computeIfAbsent('mappedButtons', { k -> new HashMap() })
     mappedButtons[button.toString()] = codeName
 }
 
@@ -257,7 +261,7 @@ def setHvacConfig(final Map configJson) {
     info "setHvacConfig(${configJson?.manufacturer} - ${configJson?.smartIrId})"
 
     if (!configJson || !configJson.smartIrId) {
-        error "Invalid config: missing required fields"
+        error 'Invalid config: missing required fields'
         return
     }
 
@@ -269,19 +273,19 @@ def setHvacConfig(final Map configJson) {
         smartIrId: configJson.smartIrId,
         offCommand: configJson.offCommand,           // ← Critical: OFF command stored locally
         commands: configJson.commands ?: [:],        // ← All 200+ commands stored locally
-        currentState: [mode: "off", temp: null, fan: null]
+        currentState: [mode: 'off', temp: null, fan: null]
     ]
 
     // Update readonly attributes for display
-    doSendEvent(name: "hvacManufacturer", value: configJson.manufacturer ?: "Unknown")
-    doSendEvent(name: "hvacModel", value: configJson.model ?: "Unknown")
-    doSendEvent(name: "hvacSmartIrId", value: configJson.smartIrId)
-    doSendEvent(name: "hvacOffCommand", value: configJson.offCommand?.take(50) ?: "Not set")
-    doSendEvent(name: "hvacCurrentState", value: "OFF")
-    doSendEvent(name: "hvacConfigured", value: "Yes")
-    doSendEvent(name: "hvacLastOnCommand", value: "None")
+    doSendEvent(name: 'hvacManufacturer', value: configJson.manufacturer ?: 'Unknown')
+    doSendEvent(name: 'hvacModel', value: configJson.model ?: 'Unknown')
+    doSendEvent(name: 'hvacSmartIrId', value: configJson.smartIrId)
+    doSendEvent(name: 'hvacOffCommand', value: configJson.offCommand?.take(50) ?: 'Not set')
+    doSendEvent(name: 'hvacCurrentState', value: 'OFF')
+    doSendEvent(name: 'hvacConfigured', value: 'Yes')
+    doSendEvent(name: 'hvacLastOnCommand', value: 'None')
 
-    info "HVAC configuration saved successfully"
+    info 'HVAC configuration saved successfully'
 }
 
 /**
@@ -289,20 +293,20 @@ def setHvacConfig(final Map configJson) {
  * Called by: HVAC Setup Wizard app (to start over)
  */
 def clearHvacConfig(final String description) {
-    info "clearHvacConfig()"
+    info 'clearHvacConfig()'
 
     state.hvacConfig = null
 
     // Clear readonly attributes
-    doSendEvent(name: "hvacManufacturer", value: "Not configured")
-    doSendEvent(name: "hvacModel", value: "Not configured")
-    doSendEvent(name: "hvacSmartIrId", value: "Not configured")
-    doSendEvent(name: "hvacOffCommand", value: "Not configured")
-    doSendEvent(name: "hvacCurrentState", value: "Not configured")
-    doSendEvent(name: "hvacConfigured", value: "No")
-    doSendEvent(name: "hvacLastOnCommand", value: "Not configured")
+    doSendEvent(name: 'hvacManufacturer', value: 'Not configured')
+    doSendEvent(name: 'hvacModel', value: 'Not configured')
+    doSendEvent(name: 'hvacSmartIrId', value: 'Not configured')
+    doSendEvent(name: 'hvacOffCommand', value: 'Not configured')
+    doSendEvent(name: 'hvacCurrentState', value: 'Not configured')
+    doSendEvent(name: 'hvacConfigured', value: 'No')
+    doSendEvent(name: 'hvacLastOnCommand', value: 'Not configured')
 
-    info "HVAC configuration cleared"
+    info 'HVAC configuration cleared'
 }
 
 /**
@@ -341,10 +345,10 @@ Map getHvacConfig() {
  * - No external dependencies at runtime (offline-capable)
  */
 def hvacTurnOff(final String description) {
-    info "hvacTurnOff()"
+    info 'hvacTurnOff()'
 
     if (state.hvacConfig == null || state.hvacConfig.offCommand == null) {
-        error "HVAC not configured. Please run HVAC Setup Wizard app first."
+        error 'HVAC not configured. Please run HVAC Setup Wizard app first.'
         return
     }
 
@@ -353,40 +357,40 @@ def hvacTurnOff(final String description) {
 
     // Update state
     if (state.hvacConfig.currentState != null) {
-        state.hvacConfig.currentState.mode = "off"
+        state.hvacConfig.currentState.mode = 'off'
     } else {
-        state.hvacConfig.currentState = [mode: "off", temp: null, fan: null]
+        state.hvacConfig.currentState = [mode: 'off', temp: null, fan: null]
     }
 
-    doSendEvent(name: "hvacCurrentState", value: "OFF")
+    doSendEvent(name: 'hvacCurrentState', value: 'OFF')
 
-    info "HVAC turned off"
+    info 'HVAC turned off'
 }
 
 /**
  * Restore HVAC to last known ON state
  */
 def hvacRestoreState(final String description) {
-    info "hvacRestoreState()"
+    info 'hvacRestoreState()'
 
     if (state.hvacConfig == null) {
-        error "HVAC not configured. Please run HVAC Setup Wizard app first."
+        error 'HVAC not configured. Please run HVAC Setup Wizard app first.'
         return
     }
 
     // Get last ON command
-    final String lastOnCommand = device.currentValue("hvacLastOnCommand")
-    if (lastOnCommand == null || lastOnCommand == "None" || lastOnCommand == "Not configured") {
-        warn "No previous ON state to restore"
+    final String lastOnCommand = device.currentValue('hvacLastOnCommand')
+    if (lastOnCommand == null || lastOnCommand == 'None' || lastOnCommand == 'Not configured') {
+        warn 'No previous ON state to restore'
         return
     }
 
     // Send the last ON command
     sendCode(lastOnCommand)
 
-    doSendEvent(name: "hvacCurrentState", value: formatHvacState(state.hvacConfig.currentState))
+    doSendEvent(name: 'hvacCurrentState', value: formatHvacState(state.hvacConfig.currentState))
 
-    info "HVAC state restored"
+    info 'HVAC state restored'
 }
 
 /**
@@ -402,13 +406,13 @@ def hvacSendCommand(final String mode, final BigDecimal temperature, final Strin
     info "hvacSendCommand(mode: ${mode}, temp: ${temperature}, fan: ${fan})"
 
     if (state.hvacConfig == null || state.hvacConfig.commands == null) {
-        error "HVAC not configured. Please run HVAC Setup Wizard app first."
+        error 'HVAC not configured. Please run HVAC Setup Wizard app first.'
         return
     }
 
     // Ensure currentState exists (defensive programming)
     if (state.hvacConfig.currentState == null) {
-        state.hvacConfig.currentState = [mode: "off", temp: null, fan: null]
+        state.hvacConfig.currentState = [mode: 'off', temp: null, fan: null]
     }
 
     // Convert temperature to integer for consistent lookup
@@ -433,10 +437,10 @@ def hvacSendCommand(final String mode, final BigDecimal temperature, final Strin
         fan: fan
     ]
 
-    doSendEvent(name: "hvacCurrentState", value: formatHvacState(state.hvacConfig.currentState))
-    doSendEvent(name: "hvacLastOnCommand", value: irCode.take(50))
+    doSendEvent(name: 'hvacCurrentState', value: formatHvacState(state.hvacConfig.currentState))
+    doSendEvent(name: 'hvacLastOnCommand', value: irCode.take(50))
 
-    info "HVAC command sent successfully"
+    info 'HVAC command sent successfully'
 }
 
 /*********
@@ -444,8 +448,8 @@ def hvacSendCommand(final String mode, final BigDecimal temperature, final Strin
  */
 
 String formatHvacState(final Map hvacState) {
-    if (hvacState == null) return "Unknown"
-    if (hvacState.mode == "off") return "OFF"
+    if (hvacState == null) return 'Unknown'
+    if (hvacState.mode == 'off') return 'OFF'
     return "${hvacState.mode?.toUpperCase()} ${hvacState.temp}°C Fan:${hvacState.fan?.toUpperCase()}"
 }
 
@@ -455,59 +459,59 @@ String formatHvacState(final Map hvacState) {
 
 def parse(final String description) {
     final def descMap = zigbee.parseDescriptionAsMap(description)
-     
+
     switch (descMap.clusterInt) {
     case LEARN_CLUSTER:
-        switch (Integer.parseInt(descMap.command, 16)) {
+            switch (Integer.parseInt(descMap.command, 16)) {
         case LEARN_CLUSTER_LEARN:
-            debug "received ${LEARN_CLUSTER_LEARN} (learn): ${descMap.data}"
-            break
+                    debug "received ${LEARN_CLUSTER_LEARN} (learn): ${descMap.data}"
+                    break
         case LEARN_CLUSTER_ACK:
-            debug "received ${LEARN_CLUSTER_ACK} (learn ack): ${descMap.data}"
-            break
+                    debug "received ${LEARN_CLUSTER_ACK} (learn ack): ${descMap.data}"
+                    break
         default:
             debug "received unknown message: ${descMap.command} (cluster ${descMap.clusterInt})"
-        }
-        break
+            }
+            break
     case TRANSMIT_CLUSTER:
-        switch (Integer.parseInt(descMap.command, 16)) {
+            switch (Integer.parseInt(descMap.command, 16)) {
         case TRANSMIT_CLUSTER_START_TRANSMIT:
-            debug "received ${TRANSMIT_CLUSTER_START_TRANSMIT} (start transmit): ${descMap.data}"
-            handleStartTransmit(parseStartTransmit(descMap.data))
-            break
+                    debug "received ${TRANSMIT_CLUSTER_START_TRANSMIT} (start transmit): ${descMap.data}"
+                    handleStartTransmit(parseStartTransmit(descMap.data))
+                    break
         case TRANSMIT_CLUSTER_START_TRANSMIT_ACK:
-            debug "received ${TRANSMIT_CLUSTER_START_TRANSMIT_ACK} (start transmit ack): ${descMap.data}"
-            // I think this is just an ACK of the recieved initial msg 0
-            // There's nothing do to here
-            break
+                    debug "received ${TRANSMIT_CLUSTER_START_TRANSMIT_ACK} (start transmit ack): ${descMap.data}"
+                    // I think this is just an ACK of the recieved initial msg 0
+                    // There's nothing do to here
+                    break
         case TRANSMIT_CLUSTER_CODE_DATA_REQUEST:
-            debug "received ${TRANSMIT_CLUSTER_CODE_DATA_REQUEST} (code data request): ${descMap.data}"
-            handleCodeDataRequest(parseCodeDataRequest(descMap.data))
-            break
-        case TRANSMIT_CLUSTER_CODE_DATA_RESPONSE: 
-            debug "received ${TRANSMIT_CLUSTER_CODE_DATA_RESPONSE} (code data response):: ${descMap.data}"
-            handleCodeDataResponse(parseCodeDataResponse(descMap.data))
-            break
-        case TRANSMIT_CLUSTER_DONE_SENDING: 
-            debug "received ${TRANSMIT_CLUSTER_DONE_SENDING} (done sending):: ${descMap.data}"
-            handleDoneSending(parseDoneSending(descMap.data))
-            break
-        case TRANSMIT_CLUSTER_DONE_RECEIVING: 
-            debug "received ${TRANSMIT_CLUSTER_DONE_RECEIVING} (done receiving): ${descMap.data}"
-            handleDoneReceiving(parseDoneReceiving(descMap.data))
-            break
+                    debug "received ${TRANSMIT_CLUSTER_CODE_DATA_REQUEST} (code data request): ${descMap.data}"
+                    handleCodeDataRequest(parseCodeDataRequest(descMap.data))
+                    break
+        case TRANSMIT_CLUSTER_CODE_DATA_RESPONSE:
+                    debug "received ${TRANSMIT_CLUSTER_CODE_DATA_RESPONSE} (code data response):: ${descMap.data}"
+                    handleCodeDataResponse(parseCodeDataResponse(descMap.data))
+                    break
+        case TRANSMIT_CLUSTER_DONE_SENDING:
+                    debug "received ${TRANSMIT_CLUSTER_DONE_SENDING} (done sending):: ${descMap.data}"
+                    handleDoneSending(parseDoneSending(descMap.data))
+                    break
+        case TRANSMIT_CLUSTER_DONE_RECEIVING:
+                    debug "received ${TRANSMIT_CLUSTER_DONE_RECEIVING} (done receiving): ${descMap.data}"
+                    handleDoneReceiving(parseDoneReceiving(descMap.data))
+                    break
         case TRANSMIT_CLUSTER_ACK:
-            debug "received ${TRANSMIT_CLUSTER_ACK} (ack): ${descMap.data}"
-            handleAck(parseAck(descMap.data))
-            break
+                    debug "received ${TRANSMIT_CLUSTER_ACK} (ack): ${descMap.data}"
+                    handleAck(parseAck(descMap.data))
+                    break
         default:
             debug "received unknown message: ${descMap.command} (cluster ${descMap.clusterInt})"
-        }
-        break
+            }
+            break
     default:
         warn "received unknown message from unknown cluster: 0x${descMap.command} (cluster 0x${Integer.toHexString(descMap.clusterInt)}). Ignoring"
-        debug "descMap = ${descMap}"
-        break
+            debug "descMap = ${descMap}"
+            break
     }
 }
 
@@ -523,8 +527,8 @@ def parse(final String description) {
 
 String newLearnMessage(final boolean learn) {
     return command(
-        LEARN_CLUSTER, 
-        LEARN_CLUSTER_LEARN, 
+        LEARN_CLUSTER,
+        LEARN_CLUSTER_LEARN,
         toPayload("{\"study\":${learn ? 0 : 1}}".bytes)
     )
 }
@@ -554,7 +558,7 @@ def sendLearn(final boolean learn) {
  */
 @Field static final int TRANSMIT_CLUSTER_ACK = 0x0B
 @Field static final def ACK_PAYLOAD_FORMAT = [
-    [ name: "cmd",    type: "uint16" ],
+    [ name: 'cmd',    type: 'uint16' ],
 ]
 
 Map parseAck(final List<String> payload) {
@@ -563,8 +567,8 @@ Map parseAck(final List<String> payload) {
 
 String newAckMessage(final int cmd) {
     return command(
-        TRANSMIT_CLUSTER, 
-        TRANSMIT_CLUSTER_ACK, 
+        TRANSMIT_CLUSTER,
+        TRANSMIT_CLUSTER_ACK,
         toPayload(ACK_PAYLOAD_FORMAT, [ cmd: cmd ])
     )
 }
@@ -572,11 +576,11 @@ String newAckMessage(final int cmd) {
 def handleAck(final Map message) {
     switch (message.cmd) {
     case TRANSMIT_CLUSTER_START_TRANSMIT_ACK:
-        // This is the only ack we care about
-        // zigbee-herdsman-converters seems to handle this by just delaying this by a fixed time after
-        // sending 0x00, but I think this is better
-        sendCodeDataRequest(pendingReceiveSeqs().pop(), 0)
-        break
+            // This is the only ack we care about
+            // zigbee-herdsman-converters seems to handle this by just delaying this by a fixed time after
+            // sending 0x00, but I think this is better
+            sendCodeDataRequest(pendingReceiveSeqs().pop(), 0)
+            break
     }
 }
 
@@ -585,21 +589,21 @@ def handleAck(final Map message) {
  */
 @Field static final int TRANSMIT_CLUSTER_START_TRANSMIT = 0x00
 @Field static final def START_TRANSMIT_PAYLOAD_FORMAT = [
-    [ name: "seq",    type: "uint16" ],
-    [ name: "length", type: "uint32" ],
-    [ name: "unk1",   type: "uint32" ], 
-    [ name: "unk2",   type: "uint16" ], // Cluster Id?
-    [ name: "unk3",   type: "uint8" ], 
-    [ name: "cmd",    type: "uint8" ], 
-    [ name: "unk4",   type: "uint16" ],
+    [ name: 'seq',    type: 'uint16' ],
+    [ name: 'length', type: 'uint32' ],
+    [ name: 'unk1',   type: 'uint32' ],
+    [ name: 'unk2',   type: 'uint16' ], // Cluster Id?
+    [ name: 'unk3',   type: 'uint8' ],
+    [ name: 'cmd',    type: 'uint8' ],
+    [ name: 'unk4',   type: 'uint16' ],
 ]
 
 def newStartTransmitMessage(final int seq, final int length) {
     return command(
-        TRANSMIT_CLUSTER, 
+        TRANSMIT_CLUSTER,
         TRANSMIT_CLUSTER_START_TRANSMIT,
         toPayload(
-            START_TRANSMIT_PAYLOAD_FORMAT, 
+            START_TRANSMIT_PAYLOAD_FORMAT,
             [
                 seq: seq,
                 length: length,
@@ -633,28 +637,28 @@ def handleStartTransmit(final Map message) {
 }
 
 /**
- * 0x01 Start Transmit ACK 
+ * 0x01 Start Transmit ACK
  * ??? I don't actually know what this is for, but it needs to happen before 0x02.
  * The body seems to just be the same as 0x00 with an extra zero byte at the beginning
  */
 @Field static final int TRANSMIT_CLUSTER_START_TRANSMIT_ACK = 0x01
 @Field static final def START_TRANSMIT_ACK_PAYLOAD_FORMAT = [
-    [ name: "zero",   type: "uint8" ],
-    [ name: "seq",    type: "uint16" ],
-    [ name: "length", type: "uint32" ],
-    [ name: "unk1",   type: "uint32" ], 
-    [ name: "unk2",   type: "uint16" ], // Cluster Id?
-    [ name: "unk3",   type: "uint8" ], 
-    [ name: "cmd",    type: "uint8" ], 
-    [ name: "unk4",   type: "uint16" ],
+    [ name: 'zero',   type: 'uint8' ],
+    [ name: 'seq',    type: 'uint16' ],
+    [ name: 'length', type: 'uint32' ],
+    [ name: 'unk1',   type: 'uint32' ],
+    [ name: 'unk2',   type: 'uint16' ], // Cluster Id?
+    [ name: 'unk3',   type: 'uint8' ],
+    [ name: 'cmd',    type: 'uint8' ],
+    [ name: 'unk4',   type: 'uint16' ],
 ]
 
 String newStartTransmitAckMessage(final int seq, final int length) {
     return command(
-        TRANSMIT_CLUSTER, 
-        TRANSMIT_CLUSTER_START_TRANSMIT_ACK, 
+        TRANSMIT_CLUSTER,
+        TRANSMIT_CLUSTER_START_TRANSMIT_ACK,
         toPayload(
-            START_TRANSMIT_ACK_PAYLOAD_FORMAT, 
+            START_TRANSMIT_ACK_PAYLOAD_FORMAT,
             [
                 zero: 0,
                 seq: seq,
@@ -684,17 +688,17 @@ Map parseStartTransmitAck(final List<String> payload) {
  */
 @Field static final int TRANSMIT_CLUSTER_CODE_DATA_REQUEST = 0x02
 @Field static final def CODE_DATA_REQUEST_PAYLOAD_FORMAT = [
-    [ name: "seq",      type: "uint16" ],
-    [ name: "position", type: "uint32" ],
-    [ name: "maxlen",   type: "uint8" ],
+    [ name: 'seq',      type: 'uint16' ],
+    [ name: 'position', type: 'uint32' ],
+    [ name: 'maxlen',   type: 'uint8' ],
 ]
 
 String newCodeDataRequestMessage(final int seq, final int position) {
     return command(
-        TRANSMIT_CLUSTER, 
-        TRANSMIT_CLUSTER_CODE_DATA_REQUEST, 
+        TRANSMIT_CLUSTER,
+        TRANSMIT_CLUSTER_CODE_DATA_REQUEST,
         toPayload(
-            CODE_DATA_REQUEST_PAYLOAD_FORMAT, 
+            CODE_DATA_REQUEST_PAYLOAD_FORMAT,
             [
                 seq: seq,
                 position: position,
@@ -734,16 +738,16 @@ def handleCodeDataRequest(final Map message) {
  */
 @Field static final int TRANSMIT_CLUSTER_CODE_DATA_RESPONSE = 0x03
 @Field static final def CODE_DATA_RESPONSE_PAYLOAD_FORMAT = [
-    [ name: "zero",       type: "uint8" ],
-    [ name: "seq",        type: "uint16" ],
-    [ name: "position",   type: "uint32" ],
-    [ name: "msgpart",    type: 'octetStr' ],
-    [ name: "msgpartcrc", type: "uint8"],
+    [ name: 'zero',       type: 'uint8' ],
+    [ name: 'seq',        type: 'uint16' ],
+    [ name: 'position',   type: 'uint32' ],
+    [ name: 'msgpart',    type: 'octetStr' ],
+    [ name: 'msgpartcrc', type: 'uint8'],
 ]
 
 String newCodeDataResponseMessage(final int seq, final int position, final byte[] data, final int crc) {
     return command(
-        TRANSMIT_CLUSTER, 
+        TRANSMIT_CLUSTER,
         TRANSMIT_CLUSTER_CODE_DATA_RESPONSE,
         toPayload(
             CODE_DATA_RESPONSE_PAYLOAD_FORMAT,
@@ -796,7 +800,7 @@ def handleCodeDataResponse(final Map message) {
         sendCodeDataRequest(message.seq, buffer.size)
     } else {
         sendDoneSending(message.seq)
-    }   
+    }
 }
 
 /**
@@ -804,15 +808,15 @@ def handleCodeDataResponse(final Map message) {
  */
 @Field static final int TRANSMIT_CLUSTER_DONE_SENDING = 0x04
 @Field static final def DONE_SENDING_PAYLOAD_FORMAT = [
-    [ name: "zero1", type: "uint8" ],
-    [ name: "seq",   type: "uint16" ],
-    [ name: "zero2", type: "uint16" ],
+    [ name: 'zero1', type: 'uint8' ],
+    [ name: 'seq',   type: 'uint16' ],
+    [ name: 'zero2', type: 'uint16' ],
 ]
 
 String newDoneSendingMessage(final int seq) {
     return command(
-        TRANSMIT_CLUSTER, 
-        TRANSMIT_CLUSTER_DONE_SENDING, 
+        TRANSMIT_CLUSTER,
+        TRANSMIT_CLUSTER_DONE_SENDING,
         toPayload(
             DONE_SENDING_PAYLOAD_FORMAT,
             [
@@ -835,9 +839,9 @@ Map parseDoneSending(final List<String> payload) {
 }
 
 def handleDoneSending(final Map message) {
-    info "code fully sent"
+    info 'code fully sent'
     sendBuffers().remove(message.seq)
-    sendDoneReceiving(message.seq) 
+    sendDoneReceiving(message.seq)
 }
 
 /**
@@ -845,14 +849,14 @@ def handleDoneSending(final Map message) {
  */
 @Field static final int TRANSMIT_CLUSTER_DONE_RECEIVING = 0x05
 @Field static final def DONE_RECEIVING_PAYLOAD_FORMAT = [
-    [ name: "seq",        type: "uint16" ],
-    [ name: "zero",       type: "uint16" ],
+    [ name: 'seq',        type: 'uint16' ],
+    [ name: 'zero',       type: 'uint16' ],
 ]
 
 String newDoneReceivingMessage(final int seq) {
     return command(
-        TRANSMIT_CLUSTER, 
-        TRANSMIT_CLUSTER_DONE_RECEIVING, 
+        TRANSMIT_CLUSTER,
+        TRANSMIT_CLUSTER_DONE_RECEIVING,
         toPayload(
             DONE_RECEIVING_PAYLOAD_FORMAT,
             [
@@ -881,18 +885,17 @@ def handleDoneReceiving(final Map message) {
     // Add a newline every 25 characters so it wraps on the Hubitat UI
     // Otherwise the code overflows the page, making it hard to copy
     // We remove all whitespace in sendCode to undo this
-    final String eventValue = code.split("(?<=\\G.{25})").join("\n")
-    doSendEvent(name: "lastLearnedCode", value: eventValue, descriptionText: "${device} lastLearnedCode is ${code}".toString())
+    final String eventValue = code.split('(?<=\\G.{25})').join('\n')
+    doSendEvent(name: 'lastLearnedCode', value: eventValue, descriptionText: "${device} lastLearnedCode is ${code}".toString())
 
     final String optionalCodeName = pendingLearnCodeNames().pop()
     if (optionalCodeName != null) {
-        final Map learnedCodes = state.computeIfAbsent("learnedCodes", {k -> new HashMap()})
+        final Map learnedCodes = state.computeIfAbsent('learnedCodes', { k -> new HashMap() })
         learnedCodes[optionalCodeName] = code
     }
 
     sendLearn(false)
 }
-
 
 /*************
  * BASIC UTILS
@@ -903,7 +906,7 @@ def handleDoneReceiving(final Map message) {
  * used for the payload of most commands.
  */
 String toPayload(final byte[] bytes) {
-    return bytes.collect({b -> String.format("%02X", b)}).join(' ') 
+    return bytes.collect({ b -> String.format('%02X', b) }).join(' ')
 }
 
 /**
@@ -911,7 +914,7 @@ String toPayload(final byte[] bytes) {
  * as a byte[]
  */
 byte[] toBytes(final List<String> payload) {
-    return payload.collect({x -> Integer.parseInt(x, 16) as byte}) as byte[]
+    return payload.collect({ x -> Integer.parseInt(x, 16) as byte }) as byte[]
 }
 
 /**
@@ -924,14 +927,14 @@ String toPayload(final List<Map> format, final Map<String, Object> payload) {
     for (def entry in format) {
         def value = payload[entry.name]
         switch (entry.type) {
-        case "uint8": writeIntegerLe(output, value, 1); break
-        case "uint16": writeIntegerLe(output, value, 2); break
-        case "uint24": writeIntegerLe(output, value, 3); break
-        case "uint32": writeIntegerLe(output, value, 4); break
-        case "octetStr": 
-            writeIntegerLe(output, value.length, 1)
-            output.write(value, 0, value.length)
-            break
+        case 'uint8': writeIntegerLe(output, value, 1); break
+        case 'uint16': writeIntegerLe(output, value, 2); break
+        case 'uint24': writeIntegerLe(output, value, 3); break
+        case 'uint32': writeIntegerLe(output, value, 4); break
+        case 'octetStr':
+                writeIntegerLe(output, value.length, 1)
+                output.write(value, 0, value.length)
+                break
         default: throw new RuntimeException("Unknown type: ${entry.type} (name: ${entry.name})")
         }
     }
@@ -948,15 +951,15 @@ Map toStruct(final List<Map> format, final List<String> payload) {
     final def result = [:]
     for (def entry in format) {
         switch (entry.type) {
-        case "uint8":  result[entry.name] = readIntegerLe(input, 1); break
-        case "uint16": result[entry.name] = readIntegerLe(input, 2); break
-        case "uint24": result[entry.name] = readIntegerLe(input, 3); break
-        case "uint32": result[entry.name] = readIntegerLe(input, 4); break
-        case "octetStr": 
-            final int length = readIntegerLe(input, 1)
-            result[entry.name] = new byte[length]
-            input.read(result[entry.name], 0, length)
-            break
+        case 'uint8':  result[entry.name] = readIntegerLe(input, 1); break
+        case 'uint16': result[entry.name] = readIntegerLe(input, 2); break
+        case 'uint24': result[entry.name] = readIntegerLe(input, 3); break
+        case 'uint32': result[entry.name] = readIntegerLe(input, 4); break
+        case 'octetStr':
+                final int length = readIntegerLe(input, 1)
+                result[entry.name] = new byte[length]
+                input.read(result[entry.name], 0, length)
+                break
         default: throw new RuntimeException("Unknown type: ${entry.type} (name: ${entry.name})")
         }
     }
@@ -967,11 +970,11 @@ Map toStruct(final List<Map> format, final List<String> payload) {
  * Write an integer in twos complement little endian byte order to the given
  * output stream, taking up the number of bytes given
  */
-def writeIntegerLe(final ByteArrayOutputStream out, int value, final int numBytes) { 
-    for (int p = 0; p < numBytes; p++) { 
+def writeIntegerLe(final ByteArrayOutputStream out, int value, final int numBytes) {
+    for (int p = 0; p < numBytes; p++) {
         final int digit1 = value % 16
         value = value.intdiv(16)
-        final int digit2 = value % 16 
+        final int digit2 = value % 16
         out.write(digit2 * 16 + digit1)
         value = value.intdiv(16)
     }
@@ -984,7 +987,7 @@ def readIntegerLe(final ByteArrayInputStream input, final int numBytes) {
     int value = 0
     int pos = 1
     for (int i = 0; i < numBytes; i++) {
-        value += input.read()*pos
+        value += input.read() * pos
         pos *= 0x100
     }
     return value
@@ -994,17 +997,17 @@ def readIntegerLe(final ByteArrayInputStream input, final int numBytes) {
  * @return the next value in a sequence, persisted in the driver state
  */
 def nextSeq() {
-    return state.nextSeq = ((state.nextSeq ?: 0) + 1) % 0x10000;
+    return state.nextSeq = ((state.nextSeq ?: 0) + 1) % 0x10000
 }
 
 /**
  * Checksum used to ensure the code parts are assembled correctly
- * @return the sum of all bytes in the byte array, mod 256 
+ * @return the sum of all bytes in the byte array, mod 256
  *  (yes, this is a terrible CRC as the order could be completely wrong and still get the right value)
  */
 def checksum(final byte[] byteArray) {
     // Java/Groovy bytes are signed, Byte.toUnsignedInt gets us the right integer value
-    return byteArray.inject(0, {acc, val -> acc + Byte.toUnsignedInt(val)}) % 0x100
+    return byteArray.inject(0, { acc, val -> acc + Byte.toUnsignedInt(val) }) % 0x100
 }
 
 /**
@@ -1015,23 +1018,23 @@ def error(msg) {
     log.error(msg)
 }
 def warn(msg) {
-    if (logLevel == "WARN" || logLevel == "INFO" || logLevel == "DEBUG") {
+    if (logLevel == 'WARN' || logLevel == 'INFO' || logLevel == 'DEBUG') {
         log.warn(msg)
     }
 }
 def info(msg) {
-    if (logLevel == "INFO" || logLevel == "DEBUG") {
+    if (logLevel == 'INFO' || logLevel == 'DEBUG') {
         log.info(msg)
     }
 }
 def debug(msg) {
-    if (logLevel == "DEBUG") {
+    if (logLevel == 'DEBUG') {
         log.debug(msg)
     }
 }
 def resetLogLevel() {
-    info "logLevel auto reset to INFO"
-    device.updateSetting("logLevel", [value:"INFO", type:"enum"])
+    info 'logLevel auto reset to INFO'
+    device.updateSetting('logLevel', [value:'INFO', type:'enum'])
 }
 
 /*************
@@ -1089,5 +1092,5 @@ def encodeBase64(final byte[] bytes) {
  */
 String command(final int clusterId, final int commandId, final String payload) {
     return "he cmd 0x${device.deviceNetworkId} 0x${device.endpointId} 0x${Integer.toHexString(clusterId)} 0x${Integer.toHexString(commandId)} {${payload}}"
-    //return zigbee.command(clusterId, commandId, payload)[0]
+//return zigbee.command(clusterId, commandId, payload)[0]
 }
