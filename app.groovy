@@ -205,7 +205,6 @@ class FastLZ {
  */
 
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 class TuyaIRService {
 
@@ -229,13 +228,15 @@ class TuyaIRService {
             // 2. FastLZ decompress
             byte[] rawBytes = FastLZ.decompress(compressed)
 
-            // 3. Unpack 16-bit little-endian integers
+            // 3. Unpack 16-bit little-endian integers (manually to avoid ByteOrder restriction)
             List<Integer> timings = []
-            ByteBuffer buffer = ByteBuffer.wrap(rawBytes).order(ByteOrder.LITTLE_ENDIAN)
-
-            while (buffer.remaining() >= 2) {
-                int timing = buffer.getShort() & 0xFFFF  // Unsigned short
+            int i = 0
+            while (i + 1 < rawBytes.length) {
+                int low = rawBytes[i] & 0xFF       // Low byte first (little-endian)
+                int high = rawBytes[i + 1] & 0xFF  // High byte second
+                int timing = low | (high << 8)     // Combine: low + (high * 256)
                 timings << timing
+                i += 2
             }
 
             return timings
@@ -259,18 +260,19 @@ class TuyaIRService {
      */
     static String encodeTuyaIR(List<Integer> timings) {
         try {
-            // 1. Pack as 16-bit little-endian integers
-            ByteBuffer buffer = ByteBuffer.allocate(timings.size() * 2)
-            buffer.order(ByteOrder.LITTLE_ENDIAN)
+            // 1. Pack as 16-bit little-endian integers (manually to avoid ByteOrder restriction)
+            byte[] rawBytes = new byte[timings.size() * 2]
+            int byteIndex = 0
 
             timings.each { timing ->
                 if (timing < 0 || timing > 65535) {
                     throw new IllegalArgumentException("Timing value ${timing} out of range (0-65535)")
                 }
-                buffer.putShort((short)timing)
+                // Little-endian: low byte first, then high byte
+                rawBytes[byteIndex] = (byte)(timing & 0xFF)         // Low byte
+                rawBytes[byteIndex + 1] = (byte)((timing >> 8) & 0xFF)  // High byte
+                byteIndex += 2
             }
-
-            byte[] rawBytes = buffer.array()
 
             // 2. FastLZ compress
             byte[] compressed = FastLZ.compress(rawBytes)

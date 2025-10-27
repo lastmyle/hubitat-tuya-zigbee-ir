@@ -4,7 +4,6 @@ import org.junit.Test
 import org.junit.Before
 import org.junit.BeforeClass
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /**
  * Tests for IR service classes (inlined in app.groovy)
