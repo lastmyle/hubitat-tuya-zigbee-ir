@@ -14,7 +14,7 @@ This is a Hubitat driver for Tuya Zigbee IR Remote Controls (Model ZS06/TS1201).
 make test
 
 # Alternative: Direct Groovy execution (requires Groovy 2.4.16)
-groovy -cp tst tst/all.groovy
+groovy -cp test test/all.groovy
 ```
 
 ### GitHub Actions
@@ -39,11 +39,11 @@ The driver implements a complex back-and-forth message sequence with the Tuya de
 
 ### Testing Structure
 
-- **tst/all.groovy**: Test runner executing all test suites
-- **tst/HubitatDriverFacade.groovy**: Mock facade for Hubitat-specific APIs
-- **tst/MessageTests.groovy**: Protocol message handling tests  
-- **tst/UtilsTests.groovy**: Utility function tests
-- **tst/EndToEndTests.groovy**: Full learn/send sequence tests
+- **test/all.groovy**: Test runner executing all test suites
+- **test/HubitatDriverFacade.groovy**: Mock facade for Hubitat-specific APIs
+- **test/MessageTests.groovy**: Protocol message handling tests
+- **test/UtilsTests.groovy**: Utility function tests
+- **test/EndToEndTests.groovy**: Full learn/send sequence tests
 
 ### Integration Approach
 

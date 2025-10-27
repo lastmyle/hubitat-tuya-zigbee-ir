@@ -1,7 +1,44 @@
 # hubitat-tuya-zigbee-ir
 Hubitat Driver for Tuya Zigbee IR Remote Controls
 
-# Instructions 
+## Development Setup
+
+### Prerequisites
+- macOS, Linux, or WSL on Windows
+- Bash or Zsh shell
+
+### Quick Start
+
+```bash
+# 1. Install Groovy 2.4.19 via SDKMAN
+make setup
+
+# 2. Activate SDKMAN in your current shell (first time only)
+source ~/.sdkman/bin/sdkman-init.sh
+
+# 3. Run tests
+make test
+
+# 4. Deploy to hub
+make deploy
+```
+
+**Note:** This project includes a `.sdkmanrc` file that automatically uses Groovy 2.4.19 (matching Hubitat's exact version) when you enter the project directory. After initial setup, SDKMAN will auto-switch versions for you.
+
+### Available Commands
+
+```bash
+make setup     # Install development dependencies
+make test      # Run all tests (76/82 passing = 92.7%)
+make validate  # Validate code syntax
+make deploy    # Deploy to Hubitat hub
+```
+
+Note: CodeNarc linting (`make lint`) is not currently supported due to compatibility issues between Groovy 2.4.x and recent CodeNarc versions.
+
+For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+## User Instructions
 
 This driver was written for my own personal use and I consider it v0.1 proof of concept.
 

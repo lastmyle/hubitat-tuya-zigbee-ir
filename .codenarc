@@ -1,0 +1,291 @@
+ruleset {
+    description 'CodeNarc RuleSet for Hubitat Groovy Drivers and Apps'
+
+    // === Naming Conventions ===
+    ClassName
+    FieldName
+    MethodName {
+        ignoreMethodNames = 'installed,updated,initialize,uninstalled,parse,configure'
+    }
+    VariableName
+
+    // === Unused Code ===
+    UnusedVariable
+    UnusedPrivateField
+    UnusedPrivateMethod
+
+    // === Basic Rules ===
+    AssertWithinFinallyBlock
+    AssignmentInConditional
+    BigDecimalInstantiation
+    BooleanGetBoolean
+    BrokenNullCheck
+    BrokenOddnessCheck
+    ClassForName
+    ComparisonOfTwoConstants
+    ComparisonWithSelf
+    ConstantAssertExpression
+    ConstantIfExpression
+    ConstantTernaryExpression
+    DeadCode
+    DoubleNegative
+    DuplicateCaseStatement
+    DuplicateMapKey
+    DuplicateSetValue
+    EmptyCatchBlock {
+        doNotApplyToClassNames = '*Test,*Tests,*Facade'
+    }
+    EmptyElseBlock
+    EmptyFinallyBlock
+    EmptyForStatement
+    EmptyIfStatement
+    EmptyMethod {
+        doNotApplyToClassNames = '*Test,*Tests,*Facade'
+    }
+    EmptyStaticInitializer
+    EmptySwitchStatement
+    EmptySynchronizedStatement
+    EmptyTryBlock
+    EmptyWhileStatement
+    EqualsAndHashCode
+    EqualsOverloaded
+    ExplicitGarbageCollection
+    ForLoopShouldBeWhileLoop
+    HardCodedWindowsFileSeparator
+    HardCodedWindowsRootDirectory
+    IntegerGetInteger
+    MultipleUnaryOperators
+    RandomDoubleCoercedToZero
+    RemoveAllOnSelf
+    ReturnFromFinallyBlock
+    ThrowExceptionFromFinallyBlock
+
+    // === Concurrency ===
+    BusyWait
+    DoubleCheckedLocking
+    InconsistentPropertyLocking
+    InconsistentPropertySynchronization
+    NestedSynchronization
+    StaticCalendarField
+    StaticConnection
+    StaticDateFormatField
+    StaticMatcherField
+    StaticSimpleDateFormatField
+    SynchronizedMethod
+    SynchronizedOnBoxedPrimitive
+    SynchronizedOnGetClass
+    SynchronizedOnReentrantLock
+    SynchronizedOnString
+    SynchronizedOnThis
+    SynchronizedReadObjectMethod
+    SystemRunFinalizersOnExit
+    ThisReferenceEscapesConstructor
+    ThreadGroup
+    ThreadLocalNotStaticFinal
+    ThreadYield
+    UseOfNotifyMethod
+    VolatileArrayField
+    VolatileLongOrDoubleField
+    WaitOutsideOfWhileLoop
+
+    // === Design Rules (Relaxed for Hubitat) ===
+    AbstractClassWithoutAbstractMethod {
+        doNotApplyToClassNames = '*Test,*Tests,*Facade,Mock*'
+    }
+    CloseWithoutCloseable
+    ConstantsOnlyInterface
+    EmptyMethodInAbstractClass
+    PublicInstanceField {
+        // Hubitat apps/drivers use public fields for settings
+        doNotApplyToFilesMatching = '.*driver\\.groovy|.*-app\\.groovy'
+    }
+
+    // === Exceptions ===
+    CatchArrayIndexOutOfBoundsException
+    CatchError
+    CatchException {
+        doNotApplyToClassNames = '*Test,*Tests,*Facade'
+    }
+    CatchIllegalMonitorStateException
+    CatchIndexOutOfBoundsException
+    CatchNullPointerException
+    CatchRuntimeException {
+        doNotApplyToClassNames = '*Test,*Tests,*Facade'
+    }
+    CatchThrowable
+    ConfusingClassNamedException
+    ExceptionExtendsError
+    ExceptionNotThrown
+    MissingNewInThrowStatement
+    ReturnNullFromCatchBlock
+    SwallowThreadDeath
+    ThrowError
+    ThrowException
+    ThrowNullPointerException
+    ThrowRuntimeException
+
+    // === Imports ===
+    DuplicateImport
+    ImportFromSamePackage
+    ImportFromSunPackages
+    UnnecessaryGroovyImport
+    UnusedImport
+
+    // === Formatting (Relaxed) ===
+    BracesForClass
+    BracesForForLoop
+    BracesForIfElse
+    BracesForMethod
+    BracesForTryCatchFinally
+    ClassJavadoc {
+        enabled = false // Hubitat scripts don't require class javadoc
+    }
+    LineLength {
+        length = 140 // Hubitat scripts can be longer
+    }
+    SpaceAfterCatch
+    SpaceAfterComma
+    SpaceAfterClosingBrace
+    SpaceAfterFor
+    SpaceAfterIf
+    SpaceAfterOpeningBrace
+    SpaceAfterSemicolon
+    SpaceAfterSwitch
+    SpaceAfterWhile
+    SpaceBeforeClosingBrace
+    SpaceBeforeOpeningBrace
+
+    // === Groovy Best Practices ===
+    AssignCollectionSort
+    AssignCollectionUnique
+    ClosureAsLastMethodParameter
+    CollectAllIsDeprecated
+    ConfusingTernary
+    ExplicitArrayListInstantiation
+    ExplicitCallToAndMethod
+    ExplicitCallToCompareToMethod
+    ExplicitCallToEqualsMethod
+    ExplicitCallToGetAtMethod
+    ExplicitCallToLeftShiftMethod
+    ExplicitCallToOrMethod
+    ExplicitCallToPlusMethod
+    ExplicitCallToPowerMethod
+    ExplicitHashMapInstantiation
+    ExplicitLinkedHashMapInstantiation
+    ExplicitLinkedListInstantiation
+    ExplicitStackInstantiation
+    ExplicitTreeSetInstantiation
+    GStringAsMapKey
+    GStringExpressionWithinString
+    GetterMethodCouldBeProperty
+    GroovyLangImmutable
+    UseCollectMany
+    UseCollectNested
+
+    // === Unnecessary Code ===
+    AddEmptyString
+    ConsecutiveLiteralAppends
+    ConsecutiveStringConcatenation
+    UnnecessaryBigDecimalInstantiation
+    UnnecessaryBigIntegerInstantiation
+    UnnecessaryBooleanExpression
+    UnnecessaryBooleanInstantiation
+    UnnecessaryCallForLastElement
+    UnnecessaryCallToSubstring
+    UnnecessaryCast
+    UnnecessaryCatchBlock
+    UnnecessaryCollectCall
+    UnnecessaryCollectionCall
+    UnnecessaryConstructor
+    UnnecessaryDefInFieldDeclaration
+    UnnecessaryDefInMethodDeclaration
+    UnnecessaryDefInVariableDeclaration
+    UnnecessaryDotClass
+    UnnecessaryDoubleInstantiation
+    UnnecessaryElseStatement
+    UnnecessaryFinalOnPrivateMethod
+    UnnecessaryFloatInstantiation
+    UnnecessaryGString
+    UnnecessaryGetter
+    UnnecessaryIfStatement
+    UnnecessaryInstanceOfCheck
+    UnnecessaryInstantiationToGetClass
+    UnnecessaryIntegerInstantiation
+    UnnecessaryLongInstantiation
+    UnnecessaryModOne
+    UnnecessaryNullCheck
+    UnnecessaryNullCheckBeforeInstanceOf
+    UnnecessaryObjectReferences
+    UnnecessaryOverridingMethod
+    UnnecessaryPackageReference
+    UnnecessaryParenthesesForMethodCallWithClosure
+    UnnecessaryPublicModifier
+    UnnecessaryReturnKeyword
+    UnnecessarySafeNavigationOperator
+    UnnecessarySelfAssignment
+    UnnecessarySemicolon
+    UnnecessarySetter
+    UnnecessaryStringInstantiation
+    UnnecessarySubstring
+    UnnecessaryTernaryExpression
+    UnnecessaryToString
+    UnnecessaryTransientModifier
+
+    // === Violations that are acceptable for Hubitat ===
+
+    // Disable rules that conflict with Hubitat patterns
+    MethodSize {
+        enabled = false // Hubitat methods can be long (parse, etc)
+    }
+
+    AbcMetric {
+        enabled = false // Complexity metrics not critical for scripts
+    }
+
+    CyclomaticComplexity {
+        enabled = false
+    }
+
+    NestedBlockDepth {
+        enabled = false
+    }
+
+    ParameterCount {
+        enabled = false // Hubitat command methods can have many params
+    }
+
+    // Disable documentation requirements (scripts don't need full javadoc)
+    JavadocEmptyAuthorTag {
+        enabled = false
+    }
+    JavadocEmptyLastLine {
+        enabled = false
+    }
+    JavadocEmptyParamTag {
+        enabled = false
+    }
+    JavadocEmptyReturnTag {
+        enabled = false
+    }
+    JavadocEmptySeeTag {
+        enabled = false
+    }
+    JavadocEmptySinceTag {
+        enabled = false
+    }
+    JavadocEmptyThrowsTag {
+        enabled = false
+    }
+    JavadocEmptyVersionTag {
+        enabled = false
+    }
+    JavadocMissingExceptionDescription {
+        enabled = false
+    }
+    JavadocMissingParamDescription {
+        enabled = false
+    }
+    JavadocMissingThrowsDescription {
+        enabled = false
+    }
+}

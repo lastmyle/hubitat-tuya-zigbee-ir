@@ -1,0 +1,11 @@
+{
+  "extends": "recommended",
+  "rules": {
+    "CompileStatic": "off",
+    "DuplicateStringLiteral": "off",
+    "NglParseError": "off"
+  },
+  "insight": {
+    "enable": true
+  }
+}

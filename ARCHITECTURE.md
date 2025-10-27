@@ -4,50 +4,61 @@
 
 ```mermaid
 graph TB
-    subgraph "Installer Experience"
-        IPAD[iPad/Mobile Browser]
-        HUBITAT_UI[Hubitat Web UI]
-    end
-
-    subgraph "Hubitat Platform"
-        APP[HVAC Setup Wizard App]
-        DRIVER[Tuya IR Remote Driver]
-        RULE[Rule Machine]
-        DASHBOARD[Dashboard]
-    end
-
-    subgraph "External APIs"
+    subgraph "SETUP TIME - One-time configuration"
+        INSTALLER[Installer]
+        WIZARD[HVAC Setup Wizard App]
         GITHUB[GitHub SmartIR Database]
-        SMARTIR[SmartIR JSON Files]
+
+        INSTALLER -->|1. Runs wizard once| WIZARD
+        WIZARD -->|2. Fetches IR codes| GITHUB
+        GITHUB -->|3. Returns JSON| WIZARD
+        WIZARD -->|4. Saves ALL codes locally| DRIVER_STATE[Driver State Storage]
     end
 
-    subgraph "Physical Devices"
-        IR_BLASTER[Tuya Zigbee IR Blaster]
+    subgraph "RUNTIME - Every command  sub-second"
+        USER[User/Automation]
+        DRIVER[Tuya IR Driver]
+        STATE[Local State]
+        IR_BLASTER[IR Blaster]
         HVAC[HVAC Unit]
-        REMOTE[Physical Remote]
+
+        USER -->|hvacTurnOff| DRIVER
+        DRIVER -->|Read offCommand <1ms| STATE
+        STATE -->|Base64 IR code| DRIVER
+        DRIVER -->|Zigbee 50-100ms| IR_BLASTER
+        IR_BLASTER -->|IR signal 10-20ms| HVAC
     end
 
-    IPAD -->|Opens Setup Wizard| HUBITAT_UI
-    HUBITAT_UI -->|Runs| APP
-    APP -->|Fetches Models| GITHUB
-    GITHUB -->|Returns JSON| SMARTIR
-    SMARTIR -->|IR Code Database| APP
-    APP -->|Configure| DRIVER
-    APP -->|Learn IR Code| DRIVER
-    DRIVER -->|Zigbee Commands| IR_BLASTER
-    IR_BLASTER -->|IR Signals| HVAC
-    REMOTE -->|IR Signals| IR_BLASTER
-    IR_BLASTER -->|Learned Codes| DRIVER
-    DRIVER -->|Events| APP
+    DRIVER_STATE -.->|Persisted locally| STATE
 
-    RULE -->|Turn Off/Restore| DRIVER
-    DASHBOARD -->|Control Commands| DRIVER
-
-    style APP fill:#4A90E2
-    style DRIVER fill:#50C878
-    style IR_BLASTER fill:#FFB84D
-    style HVAC fill:#E85D75
+    style WIZARD fill:#ccc,stroke:#999,stroke-dasharray: 5 5
+    style GITHUB fill:#ccc,stroke:#999,stroke-dasharray: 5 5
+    style DRIVER_STATE fill:#50C878,stroke:#2d5016,stroke-width:4px
+    style STATE fill:#50C878,stroke:#2d5016,stroke-width:4px
+    style DRIVER fill:#4A90E2,stroke:#1e5a8e,stroke-width:3px
 ```
+
+## Performance Architecture
+
+**CRITICAL REQUIREMENT: Sub-second OFF command**
+
+The system uses a clear separation:
+
+### Setup Time (One-time, can be slow)
+- Wizard app fetches from GitHub API (500-2000ms)
+- App matches learned IR code to database
+- App saves **ALL IR codes** to driver local state (~50KB)
+- **Total time**: 5-30 seconds (acceptable for one-time setup)
+
+### Runtime (Every command, must be fast)
+- Driver reads from local `state.hvacConfig.offCommand` (<1ms)
+- Driver sends via Zigbee protocol (50-100ms)
+- IR blaster emits signal (10-20ms)
+- **Total time**: <200ms (well under 1 second requirement)
+
+**Key Point**: After setup, NO network access required. ALL data is local.
+
+See [PERFORMANCE.md](PERFORMANCE.md) for detailed performance analysis.
 
 ## Component Details
 

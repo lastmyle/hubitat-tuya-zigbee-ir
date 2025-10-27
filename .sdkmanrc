@@ -1,0 +1,5 @@
+# SDKMAN configuration for Hubitat Tuya Zigbee IR project
+# This ensures consistent Groovy version across all environments
+# Matches Hubitat Elevation platform version exactly
+
+groovy=2.4.19

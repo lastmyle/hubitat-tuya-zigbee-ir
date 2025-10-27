@@ -1,0 +1,37 @@
+{
+    "groovy.test.command": "make test",
+    "groovy.lint.enable": false,
+    "files.exclude": {
+        "**/.git": true,
+        "**/.DS_Store": true
+    },
+    "files.associations": {
+        "*.groovy": "groovy"
+    },
+    "editor.formatOnSave": false,
+    "[groovy]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false
+    },
+    "cSpell.words": [
+        "Hubitat",
+        "Tuya",
+        "Zigbee",
+        "HVAC",
+        "hvac",
+        "groovy",
+        "smartir",
+        "lastmyle",
+        "Seqs",
+        "maxlen",
+        "msgpart",
+        "msgpartcrc",
+        "intdiv",
+        "litle",
+        "recieved"
+    ],
+    "terminal.integrated.env.osx": {},
+    "terminal.integrated.env.linux": {},
+    "terminal.integrated.env.windows": {}
+}

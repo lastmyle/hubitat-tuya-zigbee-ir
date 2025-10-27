@@ -2,7 +2,7 @@ import java.util.regex.Pattern
 
 class HubitatDriverFacade {
     Script driver
-    StringLog log
+    HubitatDriverStringLog log
     Map state
     List sentCommands
     List sentEvents
@@ -14,7 +14,7 @@ class HubitatDriverFacade {
         driver = shell.parse(driverText)
         driver.run()
 
-        log = new StringLog()
+        log = new HubitatDriverStringLog()
         state = [:]
         sentCommands = []
         sentEvents = []
@@ -51,7 +51,7 @@ class StubZigbeeHelper {
     StubDevice device
 }
 
-class StringLog {
+class HubitatDriverStringLog {
     StringWriter out = new StringWriter()
 
     def error(String message) {

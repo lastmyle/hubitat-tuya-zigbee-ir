@@ -6,7 +6,7 @@ import java.util.regex.Pattern
  */
 class HubitatAppFacade {
     Script app
-    StringLog log
+    HubitatAppStringLog log
     Map state
     Map settings
     List<Map> sentEvents
@@ -14,35 +14,54 @@ class HubitatAppFacade {
     Map<String, Object> mockDevices
 
     HubitatAppFacade(String appFilePath) {
-        final GroovyShell shell = new GroovyShell()
-        final String appText = new File(appFilePath).text
-        app = shell.parse(appText)
-        app.run()
-
-        log = new StringLog()
+        log = new HubitatAppStringLog()
         state = [:]
         settings = [:]
         sentEvents = []
         subscribedEvents = []
         mockDevices = [:]
 
-        // Set up app binding
-        app.binding.setVariable("log", log)
-        app.binding.setVariable("state", state)
-        app.binding.setVariable("settings", settings)
-        app.binding.setVariable("sentEvents", sentEvents)
-        app.binding.setVariable("subscribedEvents", subscribedEvents)
+        // Create a GroovyShell with Hubitat DSL stubs in the binding
+        final Binding binding = new Binding()
+
+        // Set up app binding BEFORE parsing
+        binding.setVariable("log", log)
+        binding.setVariable("state", state)
+        binding.setVariable("settings", settings)
+        binding.setVariable("sentEvents", sentEvents)
+        binding.setVariable("subscribedEvents", subscribedEvents)
 
         // Mock HTTP methods
-        app.binding.setVariable("httpGet", this.&mockHttpGet)
+        binding.setVariable("httpGet", this.&mockHttpGet)
 
         // Mock time methods
-        app.binding.setVariable("now", this.&mockNow)
-        app.binding.setVariable("pauseExecution", this.&mockPauseExecution)
+        binding.setVariable("now", this.&mockNow)
+        binding.setVariable("pauseExecution", this.&mockPauseExecution)
 
-        // Mock subscription method
-        app.binding.setVariable("subscribe", this.&mockSubscribe)
-        app.binding.setVariable("unsubscribe", this.&mockUnsubscribe)
+        // Mock subscription methods
+        binding.setVariable("subscribe", this.&mockSubscribe)
+        binding.setVariable("unsubscribe", this.&mockUnsubscribe)
+
+        // Mock Hubitat DSL methods (definition, preferences, pages)
+        binding.setVariable("definition", this.&mockDefinition)
+        binding.setVariable("preferences", this.&mockPreferences)
+        binding.setVariable("page", this.&mockPage)
+        binding.setVariable("dynamicPage", this.&mockDynamicPage)
+        binding.setVariable("section", this.&mockSection)
+        binding.setVariable("paragraph", this.&mockParagraph)
+        binding.setVariable("input", this.&mockInput)
+        binding.setVariable("href", this.&mockHref)
+
+        final GroovyShell shell = new GroovyShell(binding)
+
+        // Read app file and add necessary imports for @Field annotation
+        String appText = new File(appFilePath).text
+        if (!appText.contains("import groovy.transform.Field")) {
+            appText = "import groovy.transform.Field\n" + appText
+        }
+
+        app = shell.parse(appText)
+        app.run()
     }
 
     /**
@@ -50,6 +69,24 @@ class HubitatAppFacade {
      */
     def invokeMethod(final String methodName, args) {
         return app.invokeMethod(methodName, args)
+    }
+
+    /**
+     * Handle missing methods by delegating to the app script
+     */
+    def methodMissing(String name, args) {
+        return app.invokeMethod(name, args)
+    }
+
+    /**
+     * Handle missing properties by delegating to the app script
+     */
+    def propertyMissing(String name) {
+        return app.getProperty(name)
+    }
+
+    def propertyMissing(String name, value) {
+        app.setProperty(name, value)
     }
 
     /**
@@ -134,13 +171,78 @@ class HubitatAppFacade {
         }
 
         if (subscription) {
-            def evt = new MockEvent(
+            def evt = new HubitatAppMockEvent(
                 device: device,
                 name: attributeName,
                 value: value
             )
             subscription.handler.call(evt)
         }
+    }
+
+    /**
+     * Mock Hubitat DSL methods
+     */
+    def mockDefinition(Map params) {
+        log.debug("definition() called with: ${params}")
+        return null
+    }
+
+    def mockPreferences(Closure closure) {
+        log.debug("preferences() called")
+        // Execute the closure to register pages
+        if (closure) {
+            closure.delegate = app
+            closure.resolveStrategy = Closure.DELEGATE_FIRST
+            closure.call()
+        }
+        return null
+    }
+
+    def mockPage(Map params) {
+        log.debug("page() called with: ${params}")
+        return null
+    }
+
+    def mockDynamicPage(Map params, Closure closure) {
+        log.debug("dynamicPage() called: ${params.name}")
+        // Execute the closure to render the page content
+        if (closure) {
+            closure.delegate = app
+            closure.resolveStrategy = Closure.DELEGATE_FIRST
+            closure.call()
+        }
+        return null
+    }
+
+    def mockSection(String title = null, Closure closure) {
+        log.debug("section() called: ${title}")
+        if (closure) {
+            closure.delegate = app
+            closure.resolveStrategy = Closure.DELEGATE_FIRST
+            closure.call()
+        }
+        return null
+    }
+
+    def mockParagraph(String text) {
+        log.debug("paragraph() called")
+        return null
+    }
+
+    def mockInput(String name, String type, Map params = [:]) {
+        log.debug("input() called: ${name} (${type})")
+        return null
+    }
+
+    def mockInput(Map params) {
+        log.debug("input() called with map: ${params}")
+        return null
+    }
+
+    def mockHref(String pageName, Map params) {
+        log.debug("href() called: ${pageName}")
+        return null
     }
 }
 
@@ -188,7 +290,7 @@ class MockHttpResponse {
 /**
  * Mock event
  */
-class MockEvent {
+class HubitatAppMockEvent {
     def device
     String name
     def value
@@ -202,7 +304,7 @@ class MockEvent {
 /**
  * StringLog for capturing log output
  */
-class StringLog {
+class HubitatAppStringLog {
     StringWriter out = new StringWriter()
 
     def error(String message) {

@@ -10,5 +10,5 @@ jobs:
       - uses: actions/checkout@v4
       - uses: wtfjoke/setup-groovy@v2
         with:
-          groovy-version: '2.4.16'
-      - run: groovy -cp tst tst/all.groovy
+          groovy-version: '2.4.19'
+      - run: groovy -cp test test/all.groovy

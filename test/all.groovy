@@ -7,6 +7,9 @@ def result = junit.run(
     MessageTests.class,
     UtilsTests.class,
     EndToEndTests.class,
-    HvacDriverInterfaceTests.class
+    ServiceTests.class,
+    HvacDriverInterfaceTests.class,
+    HvacWizardTests.class,
+    HvacEventHandlingTests.class
 )
 System.exit(result.wasSuccessful() ? 0 : 1)
