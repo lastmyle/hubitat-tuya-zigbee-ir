@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 # Configuration
 HUBITAT_HOST="${HUBITAT_HOST:-}"
 DRIVER_FILE="driver.groovy"
-APP_FILE="hvac-setup-app.groovy"
+APP_FILE="app.groovy"
 
 usage() {
     cat <<EOF

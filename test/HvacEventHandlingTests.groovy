@@ -8,7 +8,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testAppInitializeSubscribesToEvents() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         // Setup mock device
         def mockDevice = new MockIrDeviceWithEvents()
@@ -17,14 +17,15 @@ class HvacEventHandlingTests {
         // Call initialize
         app.initialize()
 
-        // Verify subscription was made
-        assert mockDevice.subscriptions.size() > 0
-        assert mockDevice.subscriptions.find { it.attribute == "lastLearnedCode" }
+        // Verify subscription was made (subscriptions are tracked in app.subscribedEvents)
+        assert app.subscribedEvents.size() > 0
+        assert app.subscribedEvents.find { it.attribute == "lastLearnedCode" }
+        assert app.subscribedEvents.find { it.handlerName == "codeLearnedHandler" }
     }
 
     @Test
     void testCodeLearnedEventHandler() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         // Setup manufacturer
         app.binding.setVariable("hvacManufacturer", "Fujitsu")
@@ -45,7 +46,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testCodeLearnedEventHandlerDaikin() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         app.binding.setVariable("hvacManufacturer", "Daikin")
 
@@ -64,7 +65,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testCodeLearnedEventHandlerNoMatch() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         app.binding.setVariable("hvacManufacturer", "LG")
 
@@ -83,7 +84,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testCodeLearnedEventHandlerNoManufacturer() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         // No manufacturer selected (should still work - manufacturer is just a hint)
         app.binding.setVariable("hvacManufacturer", null)
@@ -102,7 +103,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testCodeLearnedEventHandlerEmptyCode() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         def mockEvent = new HvacMockEvent(value: "")
         app.codeLearnedHandler(mockEvent)
@@ -114,7 +115,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testCodeLearnedEventHandlerWithWhitespace() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         app.binding.setVariable("hvacManufacturer", "Fujitsu")
 
@@ -130,7 +131,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testAppButtonHandlerLearnTrigger() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         def mockDevice = new MockIrDeviceWithEvents()
         app.binding.setVariable("irDevice", mockDevice)
@@ -148,7 +149,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testAppButtonHandlerLearnTriggerNoDevice() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         app.binding.setVariable("irDevice", null)
 
@@ -161,7 +162,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testAppButtonHandlerUnknownButton() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         // Should not crash
         app.appButtonHandler("unknownButton")
@@ -172,7 +173,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testEventHandlerExceptionHandling() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         app.binding.setVariable("hvacManufacturer", "Gree")
 
@@ -188,7 +189,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testMultipleCodeLearnedEvents() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         app.binding.setVariable("hvacManufacturer", "Gree")
 
@@ -209,7 +210,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testCodeLearnedWithDifferentProtocols() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         // Test Mitsubishi
         app.binding.setVariable("hvacManufacturer", "Mitsubishi")
@@ -227,7 +228,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testManufacturerHintMismatch() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         // Set hint to Daikin but use Fujitsu code
         app.binding.setVariable("hvacManufacturer", "Daikin")
@@ -245,7 +246,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testReadyForNextPageFlag() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         app.binding.setVariable("hvacManufacturer", "LG")
 
@@ -265,20 +266,15 @@ class HvacEventHandlingTests {
 }
 
 /**
- * Mock IR device with event subscription tracking
+ * Mock IR device for testing event handlers
  */
 class MockIrDeviceWithEvents {
-    List<Map> subscriptions = []
     boolean learnIrCodeCalled = false
     String learnIrCodeCallback = null
     String displayName = "MockIrDevice"
     def id = "mock-123"
     def deviceNetworkId = "mock-dni"
     List<String> supportedCommands = [[name: "learnIrCode"], [name: "setHvacConfig"]]
-
-    void subscribe(attribute) {
-        subscriptions << [attribute: attribute]
-    }
 
     void learnIrCode(String callback) {
         learnIrCodeCalled = true

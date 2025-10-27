@@ -7,7 +7,7 @@ class DebugAppTest {
 
     @Test
     void testSimpleMethodCall() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         // Test that we can call isCacheValid
         def result1 = app.isCacheValid()
@@ -25,7 +25,7 @@ class DebugAppTest {
 
     @Test
     void testMatchCodeToModelSimple() {
-        def app = new HubitatAppFacade("hvac-setup-app.groovy")
+        def app = new HubitatAppFacade("app.groovy")
 
         println "Initial state: ${app.state}"
 

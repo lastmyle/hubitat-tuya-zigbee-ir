@@ -960,7 +960,7 @@ class HVACCodeGenerator {
  */
 
 definition(
-    name: "HVAC Setup Wizard",
+    name: "Maestro HVAC Setup Wizard",
     namespace: "hubitat.anasta.si",
     author: "Lastmyle",
     description: "Configure HVAC IR remotes with automatic model detection",
@@ -1057,7 +1057,7 @@ def selectDevice() {
             log.info "Device selected: ${irDevice.displayName}"
             log.info "Setting up event subscription..."
             unsubscribe()  // Clear any old subscriptions
-            subscribe(irDevice, "lastLearnedCode", codeLearnedHandler)
+            subscribe(irDevice, "lastLearnedCode", "codeLearnedHandler")
             log.info "✓ Subscribed to lastLearnedCode event from ${irDevice.displayName}"
 
             // Get device status
@@ -1770,7 +1770,7 @@ def initialize() {
     if (irDevice) {
         log.info "Re-subscribing to device ${irDevice.displayName}"
         unsubscribe()
-        subscribe(irDevice, "lastLearnedCode", codeLearnedHandler)
+        subscribe(irDevice, "lastLearnedCode", "codeLearnedHandler")
         log.info "✓ Event subscription active"
     } else {
         log.debug "No device selected yet, will subscribe when device is chosen"

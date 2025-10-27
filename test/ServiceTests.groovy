@@ -7,7 +7,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * Tests for IR service classes (inlined in hvac-setup-app.groovy)
+ * Tests for IR service classes (inlined in app.groovy)
  *
  * These tests load the service classes from the inlined app file
  * rather than importing from lib.services
@@ -22,7 +22,7 @@ class ServiceTests {
     @BeforeClass
     static void loadClasses() {
         // Load the app script which contains the inlined classes
-        def appScript = new File("hvac-setup-app.groovy")
+        def appScript = new File("app.groovy")
         def shell = new GroovyShell()
         def script = shell.parse(appScript)
 

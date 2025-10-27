@@ -6,7 +6,7 @@ A complete HVAC setup wizard system for Hubitat's Tuya Zigbee IR Remote Control 
 
 ## What Was Implemented
 
-### 1. **HVAC Setup Wizard App** (`hvac-setup-app.groovy`)
+### 1. **HVAC Setup Wizard App** (`app.groovy`)
 A multi-page Hubitat app that guides users through HVAC configuration:
 
 **Features:**
@@ -91,7 +91,7 @@ Comprehensive testing framework:
 ```
 hubitat-tuya-zigbee-ir/
 ├── driver.groovy                      # Enhanced with HVAC methods
-├── hvac-setup-app.groovy              # NEW: Full wizard app
+├── app.groovy              # NEW: Full wizard app
 ├── IMPLEMENTATION_PLAN.md             # NEW: Complete plan with diagrams
 ├── ARCHITECTURE.md                    # Existing architecture doc
 ├── AIRCON_DETECTION_PLAN.md          # Existing detection plan
@@ -117,7 +117,7 @@ hubitat-tuya-zigbee-ir/
 
 2. **Install the App:**
    - Go to **Apps Code**
-   - Create new app from `hvac-setup-app.groovy`
+   - Create new app from `app.groovy`
    - Save
 
 3. **Pair Your IR Blaster:**

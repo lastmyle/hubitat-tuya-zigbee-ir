@@ -145,13 +145,13 @@ class HubitatAppFacade {
     /**
      * Mock subscribe implementation
      */
-    void mockSubscribe(device, String attributeName, Closure handler) {
+    void mockSubscribe(device, String attributeName, String handlerName) {
         subscribedEvents.add([
             device: device,
             attribute: attributeName,
-            handler: handler
+            handlerName: handlerName
         ])
-        log.debug("Subscribed to ${attributeName} on ${device}")
+        log.debug("Subscribed to ${attributeName} on ${device} with handler ${handlerName}")
     }
 
     /**
@@ -176,7 +176,8 @@ class HubitatAppFacade {
                 name: attributeName,
                 value: value
             )
-            subscription.handler.call(evt)
+            // Invoke the handler method by name
+            app.invokeMethod(subscription.handlerName, [evt] as Object[])
         }
     }
 

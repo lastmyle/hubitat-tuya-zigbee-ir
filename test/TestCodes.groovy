@@ -12,7 +12,7 @@ class TestCodes {
     private static Class HVACCodeGenerator = loadHVACCodeGenerator()
 
     private static Class loadHVACCodeGenerator() {
-        def appScript = new File("hvac-setup-app.groovy")
+        def appScript = new File("app.groovy")
         def shell = new GroovyShell()
         def script = shell.parse(appScript)
         return script.class.classLoader.loadClass('HVACCodeGenerator')
