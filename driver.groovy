@@ -64,57 +64,22 @@ metadata {
         namespace: 'hubitat.lastmyle.maestro',
         author: 'Lastmyle'
         ) {
-        capability 'PushableButton'
-
         command 'learn', [
             [name: 'Code Name', type: 'STRING', description: 'Name for learned code (optional)']
         ]
         command 'sendCode', [
             [name: 'Code*', type: 'STRING', description: 'Name of learned code or raw Base64 bytes of code to send']
         ]
-        command 'forgetCode', [
-            [name: 'Code Name*', type: 'STRING', description: 'Name of learned code to forget']
-        ]
-        command 'mapButton', [
-            [name: 'Button*', type: 'NUMBER', description: 'Button number to map'],
-            [name: 'Code Name*', type: 'STRING', description: 'Name of learned code to map to the given button']
-        ]
-        command 'unmapButton', [
-            [name: 'Button*', type: 'NUMBER', description: 'Button number to unmap']
-        ]
 
         // HVAC App Interface Methods (called by HVAC Setup Wizard app)
         command 'setHvacConfig', [
-            [name: 'Config JSON*', type: 'JSON_OBJECT', description: 'Set HVAC configuration from app']
-        ]
-        command 'clearHvacConfig', [
-            [name: 'Description', type: 'STRING', description: 'Clear HVAC configuration']
-        ]
-        command 'learnIrCode', [
-            [name: 'Callback', type: 'STRING', description: 'Learn IR code and return via callback']
-        ]
-
-        // HVAC Runtime Commands
-        command 'hvacTurnOff', [
-            [name: 'Description', type: 'STRING', description: 'Turn off HVAC using configured model']
-        ]
-        command 'hvacRestoreState', [
-            [name: 'Description', type: 'STRING', description: 'Restore HVAC to last known state']
-        ]
-        command 'hvacSendCommand', [
-            [name: 'Mode*', type: 'STRING', description: 'Mode (cool/heat/fan_only)'],
-            [name: 'Temperature*', type: 'NUMBER', description: 'Temperature (16-30)'],
-            [name: 'Fan*', type: 'STRING', description: 'Fan speed (low/mid/high/auto)']
+            [name: 'Config JSON*', type: 'JSON_OBJECT', description: 'DO NOT SET MANUALLY - Used by HVAC Setup Wizard to configure HVAC control. Stores ALL IR codes (~200+ commands) locally for instant operation without network access.']
         ]
 
         // Readonly HVAC Configuration Attributes
         attribute 'lastLearnedCode', 'STRING'
-        attribute 'hvacManufacturer', 'STRING'
         attribute 'hvacModel', 'STRING'
         attribute 'hvacSmartIrId', 'STRING'
-        attribute 'hvacCurrentState', 'STRING'
-        attribute 'hvacOffCommand', 'STRING'
-        attribute 'hvacLastOnCommand', 'STRING'
         attribute 'hvacConfigured', 'STRING'
 
         // Note, my case says ZS06, but this is what Device Get Info tells me the fingerprint is
@@ -204,40 +169,6 @@ def sendCode(final String codeNameOrBase64CodeInput) {
     sendStartTransmit(seq, jsonToSend.bytes.length)
 }
 
-def forgetCode(final String codeName) {
-    info "forgetCode(${codeName})"
-    if (state.learnedCodes == null) {
-        return
-    }
-    state.learnedCodes.remove(codeName)
-}
-
-def mapButton(final BigDecimal button, final String codeName) {
-    info "mappButton(${button}, ${codeName})"
-    final Map mappedButtons = state.computeIfAbsent('mappedButtons', { k -> new HashMap() })
-    mappedButtons[button.toString()] = codeName
-}
-
-def unmapButton(final BigDecimal button) {
-    info "unmapButton(${button})"
-    if (state.mappedButtons == null) {
-        return
-    }
-    state.mappedButtons.remove(button.toString())
-}
-
-def push(final BigDecimal button) {
-    info "push(${button})"
-    if (state.mappedButtons == null) {
-        return
-    }
-    final String codeName = state.mappedButtons[button.toString()]
-    if (codeName == null) {
-        warn "Unmapped button ${button}"
-    } else {
-        sendCode(codeName)
-    }
-}
 
 /*********
  * HVAC APP INTERFACE METHODS
@@ -251,14 +182,13 @@ def push(final BigDecimal button) {
  * After this one-time setup, the driver requires NO network access for HVAC control.
  *
  * @param configJson Map containing:
- *   - manufacturer: String (e.g., "Panasonic")
  *   - model: String (e.g., "CS/CU-xxxx Series")
  *   - smartIrId: String (e.g., "1020")
  *   - offCommand: String (Base64 IR code for off) - CRITICAL for sub-second performance
  *   - commands: Map of ALL IR codes indexed by mode/temp/fan (local storage ~50KB)
  */
 def setHvacConfig(final Map configJson) {
-    info "setHvacConfig(${configJson?.manufacturer} - ${configJson?.smartIrId})"
+    info "setHvacConfig(${configJson?.smartIrId})"
 
     if (!configJson || !configJson.smartIrId) {
         error 'Invalid config: missing required fields'
@@ -268,7 +198,6 @@ def setHvacConfig(final Map configJson) {
     // Store FULL configuration locally in driver state
     // This enables sub-second runtime commands with NO network dependency
     state.hvacConfig = [
-        manufacturer: configJson.manufacturer,
         model: configJson.model,
         smartIrId: configJson.smartIrId,
         offCommand: configJson.offCommand,           // ← Critical: OFF command stored locally
@@ -277,50 +206,13 @@ def setHvacConfig(final Map configJson) {
     ]
 
     // Update readonly attributes for display
-    doSendEvent(name: 'hvacManufacturer', value: configJson.manufacturer ?: 'Unknown')
     doSendEvent(name: 'hvacModel', value: configJson.model ?: 'Unknown')
     doSendEvent(name: 'hvacSmartIrId', value: configJson.smartIrId)
-    doSendEvent(name: 'hvacOffCommand', value: configJson.offCommand?.take(50) ?: 'Not set')
-    doSendEvent(name: 'hvacCurrentState', value: 'OFF')
     doSendEvent(name: 'hvacConfigured', value: 'Yes')
-    doSendEvent(name: 'hvacLastOnCommand', value: 'None')
 
     info 'HVAC configuration saved successfully'
 }
 
-/**
- * Clear HVAC configuration
- * Called by: HVAC Setup Wizard app (to start over)
- */
-def clearHvacConfig(final String description) {
-    info 'clearHvacConfig()'
-
-    state.hvacConfig = null
-
-    // Clear readonly attributes
-    doSendEvent(name: 'hvacManufacturer', value: 'Not configured')
-    doSendEvent(name: 'hvacModel', value: 'Not configured')
-    doSendEvent(name: 'hvacSmartIrId', value: 'Not configured')
-    doSendEvent(name: 'hvacOffCommand', value: 'Not configured')
-    doSendEvent(name: 'hvacCurrentState', value: 'Not configured')
-    doSendEvent(name: 'hvacConfigured', value: 'No')
-    doSendEvent(name: 'hvacLastOnCommand', value: 'Not configured')
-
-    info 'HVAC configuration cleared'
-}
-
-/**
- * Learn IR code for the app
- * Called by: HVAC Setup Wizard app during setup
- *
- * The app will subscribe to the "lastLearnedCode" event to get the result
- */
-def learnIrCode(final String callback) {
-    info "learnIrCode() - callback: ${callback}"
-
-    // Trigger learn mode - app will receive result via lastLearnedCode event
-    learn(callback)
-}
 
 /**
  * Get current HVAC configuration
@@ -331,127 +223,6 @@ Map getHvacConfig() {
     return state.hvacConfig
 }
 
-/*********
- * HVAC RUNTIME COMMANDS
- */
-
-/**
- * Turn off HVAC using configured off command
- *
- * PERFORMANCE CRITICAL: Sub-second execution required
- * - Reads from local state.hvacConfig.offCommand (no network, no app dependency)
- * - Total execution time: <200ms including Zigbee transmission
- * - All IR codes stored locally during one-time setup by wizard app
- * - No external dependencies at runtime (offline-capable)
- */
-def hvacTurnOff(final String description) {
-    info 'hvacTurnOff()'
-
-    if (state.hvacConfig == null || state.hvacConfig.offCommand == null) {
-        error 'HVAC not configured. Please run HVAC Setup Wizard app first.'
-        return
-    }
-
-    // Send the off command (read from local state - <1ms)
-    sendCode(state.hvacConfig.offCommand)
-
-    // Update state
-    if (state.hvacConfig.currentState != null) {
-        state.hvacConfig.currentState.mode = 'off'
-    } else {
-        state.hvacConfig.currentState = [mode: 'off', temp: null, fan: null]
-    }
-
-    doSendEvent(name: 'hvacCurrentState', value: 'OFF')
-
-    info 'HVAC turned off'
-}
-
-/**
- * Restore HVAC to last known ON state
- */
-def hvacRestoreState(final String description) {
-    info 'hvacRestoreState()'
-
-    if (state.hvacConfig == null) {
-        error 'HVAC not configured. Please run HVAC Setup Wizard app first.'
-        return
-    }
-
-    // Get last ON command
-    final String lastOnCommand = device.currentValue('hvacLastOnCommand')
-    if (lastOnCommand == null || lastOnCommand == 'None' || lastOnCommand == 'Not configured') {
-        warn 'No previous ON state to restore'
-        return
-    }
-
-    // Send the last ON command
-    sendCode(lastOnCommand)
-
-    doSendEvent(name: 'hvacCurrentState', value: formatHvacState(state.hvacConfig.currentState))
-
-    info 'HVAC state restored'
-}
-
-/**
- * Send specific HVAC command (mode/temp/fan combination)
- * Called by: Apps, Rule Machine, or manually
- *
- * PERFORMANCE: Sub-second execution
- * - All commands stored locally in state.hvacConfig.commands
- * - Simple Map lookup: O(1) time complexity
- * - No network access required
- */
-def hvacSendCommand(final String mode, final BigDecimal temperature, final String fan) {
-    info "hvacSendCommand(mode: ${mode}, temp: ${temperature}, fan: ${fan})"
-
-    if (state.hvacConfig == null || state.hvacConfig.commands == null) {
-        error 'HVAC not configured. Please run HVAC Setup Wizard app first.'
-        return
-    }
-
-    // Ensure currentState exists (defensive programming)
-    if (state.hvacConfig.currentState == null) {
-        state.hvacConfig.currentState = [mode: 'off', temp: null, fan: null]
-    }
-
-    // Convert temperature to integer for consistent lookup
-    // (HVAC temps are always integers, decimal inputs are rounded down)
-    final int tempInt = temperature.toInteger()
-
-    // Look up IR code for this combination (local Map lookup - <1ms)
-    final String irCode = state.hvacConfig.commands[mode]?.get(fan)?.get(tempInt.toString())
-
-    if (irCode == null) {
-        error "No IR code found for mode:${mode} temp:${tempInt} fan:${fan}"
-        return
-    }
-
-    // Send the command
-    sendCode(irCode)
-
-    // Update state
-    state.hvacConfig.currentState = [
-        mode: mode,
-        temp: tempInt,
-        fan: fan
-    ]
-
-    doSendEvent(name: 'hvacCurrentState', value: formatHvacState(state.hvacConfig.currentState))
-    doSendEvent(name: 'hvacLastOnCommand', value: irCode.take(50))
-
-    info 'HVAC command sent successfully'
-}
-
-/*********
- * HVAC HELPER FUNCTIONS
- */
-
-String formatHvacState(final Map hvacState) {
-    if (hvacState == null) return 'Unknown'
-    if (hvacState.mode == 'off') return 'OFF'
-    return "${hvacState.mode?.toUpperCase()} ${hvacState.temp}°C Fan:${hvacState.fan?.toUpperCase()}"
-}
 
 /*********
  * MESSAGES

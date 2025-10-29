@@ -27,9 +27,6 @@ class HvacEventHandlingTests {
     void testCodeLearnedEventHandler() {
         def app = new HubitatAppFacade("app.groovy")
 
-        // Setup manufacturer
-        app.binding.setVariable("hvacManufacturer", "Fujitsu")
-
         // Simulate learned code event with real Fujitsu code
         def mockEvent = new HvacMockEvent(value: TestCodes.FUJITSU_OFF)
         app.codeLearnedHandler(mockEvent)
@@ -41,14 +38,11 @@ class HvacEventHandlingTests {
         // Verify protocol was detected
         assert app.state.wizardState.detectedModel != null
         assert app.state.wizardState.detectedModel.smartIrId == "FUJITSU_AC"
-        assert app.state.wizardState.detectedModel.manufacturer.contains("Fujitsu")
     }
 
     @Test
     void testCodeLearnedEventHandlerDaikin() {
         def app = new HubitatAppFacade("app.groovy")
-
-        app.binding.setVariable("hvacManufacturer", "Daikin")
 
         // Simulate learned code event with real Daikin code
         def mockEvent = new HvacMockEvent(value: TestCodes.DAIKIN_COOL_24_AUTO)
@@ -60,14 +54,11 @@ class HvacEventHandlingTests {
         // Verify protocol was detected
         assert app.state.wizardState.detectedModel != null
         assert app.state.wizardState.detectedModel.smartIrId == "DAIKIN"
-        assert app.state.wizardState.detectedModel.manufacturer.contains("Daikin")
     }
 
     @Test
     void testCodeLearnedEventHandlerNoMatch() {
         def app = new HubitatAppFacade("app.groovy")
-
-        app.binding.setVariable("hvacManufacturer", "LG")
 
         // Simulate learned code event with invalid code
         def mockEvent = new HvacMockEvent(value: "INVALID_CODE")
@@ -86,9 +77,6 @@ class HvacEventHandlingTests {
     void testCodeLearnedEventHandlerNoManufacturer() {
         def app = new HubitatAppFacade("app.groovy")
 
-        // No manufacturer selected (should still work - manufacturer is just a hint)
-        app.binding.setVariable("hvacManufacturer", null)
-
         // Use real code
         def mockEvent = new HvacMockEvent(value: TestCodes.PANASONIC_COOL_20_AUTO)
         app.codeLearnedHandler(mockEvent)
@@ -96,7 +84,7 @@ class HvacEventHandlingTests {
         // Verify code was stored
         assert app.state.wizardState.learnedCode == TestCodes.PANASONIC_COOL_20_AUTO
 
-        // Should still detect protocol (manufacturer hint not required)
+        // Should still detect protocol
         assert app.state.wizardState.detectedModel != null
         assert app.state.wizardState.detectedModel.smartIrId == "PANASONIC_AC"
     }
@@ -116,8 +104,6 @@ class HvacEventHandlingTests {
     @Test
     void testCodeLearnedEventHandlerWithWhitespace() {
         def app = new HubitatAppFacade("app.groovy")
-
-        app.binding.setVariable("hvacManufacturer", "Fujitsu")
 
         // Event value with newlines (as stored by driver)
         String codeWithWhitespace = TestCodes.FUJITSU_COOL_24_AUTO.replaceAll("(.{20})", "\$1\n")
@@ -175,8 +161,6 @@ class HvacEventHandlingTests {
     void testEventHandlerExceptionHandling() {
         def app = new HubitatAppFacade("app.groovy")
 
-        app.binding.setVariable("hvacManufacturer", "Gree")
-
         // Use invalid code to trigger exception path
         def mockEvent = new HvacMockEvent(value: "NOT_VALID_BASE64!")
 
@@ -190,8 +174,6 @@ class HvacEventHandlingTests {
     @Test
     void testMultipleCodeLearnedEvents() {
         def app = new HubitatAppFacade("app.groovy")
-
-        app.binding.setVariable("hvacManufacturer", "Gree")
 
         // First event - OFF code
         def event1 = new HvacMockEvent(value: TestCodes.GREE_OFF)
@@ -213,7 +195,6 @@ class HvacEventHandlingTests {
         def app = new HubitatAppFacade("app.groovy")
 
         // Test Mitsubishi
-        app.binding.setVariable("hvacManufacturer", "Mitsubishi")
         def event1 = new HvacMockEvent(value: TestCodes.MITSUBISHI_HEAT_26_HIGH)
         app.codeLearnedHandler(event1)
 
@@ -221,34 +202,13 @@ class HvacEventHandlingTests {
 
         assert model != null
         assert model.smartIrId == "MITSUBISHI_AC"
-        assert model.manufacturer.toLowerCase().contains("mitsubishi")
         assert model.modelData.operationModes.contains("heat")
         assert model.modelData.fanModes.contains("high")
     }
 
     @Test
-    void testManufacturerHintMismatch() {
-        def app = new HubitatAppFacade("app.groovy")
-
-        // Set hint to Daikin but use Fujitsu code
-        app.binding.setVariable("hvacManufacturer", "Daikin")
-
-        def event = new HvacMockEvent(value: TestCodes.FUJITSU_COOL_24_AUTO)
-        app.codeLearnedHandler(event)
-
-        // Should still detect correctly (protocol detection is independent)
-        assert app.state.wizardState.detectedModel != null
-        assert app.state.wizardState.detectedModel.smartIrId == "FUJITSU_AC"
-
-        // Check log for warning about mismatch
-        assert app.log.out.toString().contains("don't match hint")
-    }
-
-    @Test
     void testReadyForNextPageFlag() {
         def app = new HubitatAppFacade("app.groovy")
-
-        app.binding.setVariable("hvacManufacturer", "LG")
 
         // Successful detection should set readyForNextPage
         def event = new HvacMockEvent(value: TestCodes.LG_COOL_24_AUTO)

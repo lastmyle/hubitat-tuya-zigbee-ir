@@ -20,11 +20,10 @@ class HvacWizardTests {
         def app = new HubitatAppFacade("app.groovy")
 
         // Test matching Fujitsu OFF code
-        def result = app.matchCodeToModel(TestCodes.FUJITSU_OFF, "Fujitsu")
+        def result = app.matchCodeToModel(TestCodes.FUJITSU_OFF)
 
         assert result != null
         assert result.smartIrId == "FUJITSU_AC"
-        assert result.manufacturer.contains("Fujitsu")
         assert result.modelData != null
         assert result.modelData.commands != null
         assert result.modelData.commands.off != null
@@ -35,11 +34,10 @@ class HvacWizardTests {
         def app = new HubitatAppFacade("app.groovy")
 
         // Test matching Fujitsu cool command
-        def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO, "Fujitsu")
+        def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO)
 
         assert result != null
         assert result.smartIrId == "FUJITSU_AC"
-        assert result.manufacturer.contains("Fujitsu")
         assert result.modelData.operationModes.contains("cool")
         assert result.modelData.fanModes.contains("auto")
     }
@@ -49,11 +47,10 @@ class HvacWizardTests {
         def app = new HubitatAppFacade("app.groovy")
 
         // Test matching Daikin code
-        def result = app.matchCodeToModel(TestCodes.DAIKIN_COOL_24_AUTO, "Daikin")
+        def result = app.matchCodeToModel(TestCodes.DAIKIN_COOL_24_AUTO)
 
         assert result != null
         assert result.smartIrId == "DAIKIN"
-        assert result.manufacturer.contains("Daikin")
         assert result.protocolInfo != null
         assert result.protocolInfo.confidence > 0
     }
@@ -63,11 +60,10 @@ class HvacWizardTests {
         def app = new HubitatAppFacade("app.groovy")
 
         // Test matching Panasonic code
-        def result = app.matchCodeToModel(TestCodes.PANASONIC_COOL_20_AUTO, "Panasonic")
+        def result = app.matchCodeToModel(TestCodes.PANASONIC_COOL_20_AUTO)
 
         assert result != null
         assert result.smartIrId == "PANASONIC_AC"
-        assert result.manufacturer.contains("Panasonic")
     }
 
     @Test
@@ -75,11 +71,10 @@ class HvacWizardTests {
         def app = new HubitatAppFacade("app.groovy")
 
         // Test matching Mitsubishi code
-        def result = app.matchCodeToModel(TestCodes.MITSUBISHI_HEAT_26_HIGH, "Mitsubishi")
+        def result = app.matchCodeToModel(TestCodes.MITSUBISHI_HEAT_26_HIGH)
 
         assert result != null
         assert result.smartIrId == "MITSUBISHI_AC"
-        assert result.manufacturer.toLowerCase().contains("mitsubishi")
         assert result.modelData.operationModes.contains("heat")
         assert result.modelData.fanModes.contains("high")
     }
@@ -89,11 +84,10 @@ class HvacWizardTests {
         def app = new HubitatAppFacade("app.groovy")
 
         // Test matching LG code
-        def result = app.matchCodeToModel(TestCodes.LG_COOL_24_AUTO, "LG")
+        def result = app.matchCodeToModel(TestCodes.LG_COOL_24_AUTO)
 
         assert result != null
         assert result.smartIrId == "LG"
-        assert result.manufacturer.contains("LG")
     }
 
     @Test
@@ -101,20 +95,19 @@ class HvacWizardTests {
         def app = new HubitatAppFacade("app.groovy")
 
         // Test matching Gree code with different fan speeds
-        def resultAuto = app.matchCodeToModel(TestCodes.GREE_COOL_AUTO_22, "Gree")
+        def resultAuto = app.matchCodeToModel(TestCodes.GREE_COOL_AUTO_22)
         assert resultAuto != null
         assert resultAuto.smartIrId == "GREE"
-        assert resultAuto.manufacturer.contains("Gree")
 
-        def resultLow = app.matchCodeToModel(TestCodes.GREE_COOL_LOW_22, "Gree")
+        def resultLow = app.matchCodeToModel(TestCodes.GREE_COOL_LOW_22)
         assert resultLow != null
         assert resultLow.smartIrId == "GREE"
 
-        def resultMid = app.matchCodeToModel(TestCodes.GREE_COOL_MID_22, "Gree")
+        def resultMid = app.matchCodeToModel(TestCodes.GREE_COOL_MID_22)
         assert resultMid != null
         assert resultMid.smartIrId == "GREE"
 
-        def resultHigh = app.matchCodeToModel(TestCodes.GREE_COOL_HIGH_22, "Gree")
+        def resultHigh = app.matchCodeToModel(TestCodes.GREE_COOL_HIGH_22)
         assert resultHigh != null
         assert resultHigh.smartIrId == "GREE"
     }
@@ -124,7 +117,7 @@ class HvacWizardTests {
         def app = new HubitatAppFacade("app.groovy")
 
         // Test with invalid code (not a real Tuya IR code)
-        def result = app.matchCodeToModel("INVALID_CODE_XYZ", "LG")
+        def result = app.matchCodeToModel("INVALID_CODE_XYZ")
 
         assert result == null
     }
@@ -134,15 +127,15 @@ class HvacWizardTests {
         def app = new HubitatAppFacade("app.groovy")
 
         // Test with empty code
-        def result = app.matchCodeToModel("", "Fujitsu")
+        def result = app.matchCodeToModel("")
         assert result == null
 
         // Test with null code
-        result = app.matchCodeToModel(null, "Fujitsu")
+        result = app.matchCodeToModel(null)
         assert result == null
 
         // Test with whitespace only
-        result = app.matchCodeToModel("   ", "Fujitsu")
+        result = app.matchCodeToModel("   ")
         assert result == null
     }
 
@@ -157,11 +150,11 @@ class HvacWizardTests {
         String codeWithSpaces = cleanCode.replaceAll("(.{10})", "\$1 ")
         String codeWithNewlines = cleanCode.replaceAll("(.{20})", "\$1\n")
 
-        def result1 = app.matchCodeToModel(codeWithSpaces, "Fujitsu")
+        def result1 = app.matchCodeToModel(codeWithSpaces)
         assert result1 != null
         assert result1.smartIrId == "FUJITSU_AC"
 
-        def result2 = app.matchCodeToModel(codeWithNewlines, "Fujitsu")
+        def result2 = app.matchCodeToModel(codeWithNewlines)
         assert result2 != null
         assert result2.smartIrId == "FUJITSU_AC"
     }
@@ -170,12 +163,11 @@ class HvacWizardTests {
     void testCodeMatchingManufacturerMismatch() {
         def app = new HubitatAppFacade("app.groovy")
 
-        // Test Fujitsu code with Daikin hint - protocol detection should still work
-        // (it will log a warning but proceed)
-        def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO, "Daikin")
+        // Test protocol detection (no manufacturer hint needed)
+        def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO)
 
         assert result != null
-        assert result.smartIrId == "FUJITSU_AC"  // Should detect Fujitsu despite hint
+        assert result.smartIrId == "FUJITSU_AC"  // Should detect Fujitsu
     }
 
     @Test
@@ -183,12 +175,12 @@ class HvacWizardTests {
         def app = new HubitatAppFacade("app.groovy")
 
         // Test minimum temperature
-        def resultMin = app.matchCodeToModel(TestCodes.FUJITSU_COOL_16_AUTO, "Fujitsu")
+        def resultMin = app.matchCodeToModel(TestCodes.FUJITSU_COOL_16_AUTO)
         assert resultMin != null
         assert resultMin.modelData.minTemperature == 16
 
         // Test maximum temperature
-        def resultMax = app.matchCodeToModel(TestCodes.FUJITSU_COOL_30_AUTO, "Fujitsu")
+        def resultMax = app.matchCodeToModel(TestCodes.FUJITSU_COOL_30_AUTO)
         assert resultMax != null
         assert resultMax.modelData.maxTemperature == 30
     }
@@ -197,7 +189,7 @@ class HvacWizardTests {
     void testGeneratedCommandStructure() {
         def app = new HubitatAppFacade("app.groovy")
 
-        def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO, "Fujitsu")
+        def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO)
 
         assert result != null
         assert result.modelData.commands != null
@@ -219,7 +211,7 @@ class HvacWizardTests {
     void testProtocolCapabilities() {
         def app = new HubitatAppFacade("app.groovy")
 
-        def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO, "Fujitsu")
+        def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO)
 
         assert result != null
         assert result.modelData != null
@@ -240,7 +232,7 @@ class HvacWizardTests {
     void testProtocolConfidenceScore() {
         def app = new HubitatAppFacade("app.groovy")
 
-        def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO, "Fujitsu")
+        def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO)
 
         assert result != null
         assert result.protocolInfo != null
@@ -295,7 +287,7 @@ class HvacWizardTests {
         app.binding.setVariable("irDevice", mockDevice)
 
         // Use real protocol detection result
-        def detectedModel = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO, "Fujitsu")
+        def detectedModel = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO)
 
         // Setup wizard state
         app.state.wizardState = [
@@ -306,7 +298,6 @@ class HvacWizardTests {
 
         assert result == true
         assert mockDevice.savedConfig != null
-        assert mockDevice.savedConfig.manufacturer != null
         assert mockDevice.savedConfig.offCommand != null
         assert mockDevice.savedConfig.commands != null
     }
