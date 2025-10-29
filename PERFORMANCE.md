@@ -10,12 +10,12 @@ The HVAC OFF command must execute in **sub-second time** for safety and user exp
 graph TB
     subgraph "SETUP TIME (One-time)"
         WIZARD[HVAC Setup Wizard App]
-        GITHUB[GitHub SmartIR API]
-        CACHE[App Cache 24hrs]
+        MAESTRO[Maestro Cloud API]
 
-        WIZARD -->|1. Fetch models| GITHUB
-        GITHUB -->|2. JSON data| CACHE
-        CACHE -->|3. Match & save| DRIVER_STATE[Driver State Storage]
+        WIZARD -->|1. Learn IR code| WIZARD
+        WIZARD -->|2. Detect protocol| MAESTRO
+        MAESTRO -->|3. Generate commands| WIZARD
+        WIZARD -->|4. Save config| DRIVER_STATE[Driver State Storage]
     end
 
     subgraph "RUNTIME (Every Command)"
@@ -26,7 +26,7 @@ graph TB
         HVAC[HVAC Unit]
 
         USER -->|hvacTurnOff| DRIVER_LOCAL
-        DRIVER_LOCAL -->|Read offCommand| DRIVER_LOCAL
+        DRIVER_LOCAL -->|Find power_off in commands| DRIVER_LOCAL
         DRIVER_LOCAL -->|sendCode| ZIGBEE
         ZIGBEE -->|<100ms| IR
         IR -->|IR Signal| HVAC
@@ -36,7 +36,7 @@ graph TB
 
     style DRIVER_LOCAL fill:#50C878,stroke:#2d5016,stroke-width:4px
     style DRIVER_STATE fill:#50C878,stroke:#2d5016,stroke-width:4px
-    style GITHUB fill:#ccc,stroke:#999,stroke-dasharray: 5 5
+    style MAESTRO fill:#ccc,stroke:#999,stroke-dasharray: 5 5
     style WIZARD fill:#ccc,stroke:#999,stroke-dasharray: 5 5
 ```
 
@@ -46,13 +46,11 @@ graph TB
 ```
 User runs wizard (once)
   ↓
-App fetches from GitHub API (500-2000ms)
+User learns IR code from their physical remote
   ↓
-App caches models locally (24 hours)
+App sends code to Maestro Cloud API (500-2000ms)
   ↓
-User learns IR code from remote
-  ↓
-App matches code to SmartIR database
+API detects protocol and generates full command set
   ↓
 App calls driver.setHvacConfig(config)
   ↓
@@ -61,15 +59,15 @@ Driver stores EVERYTHING in state.hvacConfig
 SETUP COMPLETE
 ```
 
-**Total setup time**: 5-30 seconds (acceptable, only once)
+**Total setup time**: 5-15 seconds (acceptable, only once)
 
 ### Runtime (Every command, must be fast)
 ```
 User/Automation calls hvacTurnOff()
   ↓
-Driver reads state.hvacConfig.offCommand (<1ms - in-memory lookup)
+Driver searches for "power_off" in commands array (<1ms - array search)
   ↓
-Driver calls sendCode(offCommand) (<1ms - string processing)
+Driver calls sendCode(command.tuya_code) (<1ms - string processing)
   ↓
 Zigbee protocol executes (50-100ms - hardware)
   ↓
@@ -85,29 +83,20 @@ HVAC turns OFF
 ### What's Stored Locally in Driver State
 
 ```groovy
-// driver.groovy line 262-268
+// driver.groovy - setHvacConfig()
 state.hvacConfig = [
-    manufacturer: "Panasonic",              // Display only
-    model: "CS/CU-E9PKR",                   // Display only
-    smartIrId: "1020",                      // Display only
+    model: "Panasonic CS/CU-E9PKR",        // Display only
 
-    // CRITICAL: OFF command stored locally for instant access
-    offCommand: "JgBQAAABJJISExM5...",      // ← Sub-second access
-
-    // ALL commands stored locally (no network dependency)
+    // ALL commands stored as array (no network dependency)
+    // Commands include: power_off, 16_cool_auto, 24_cool_high, etc.
     commands: [
-        cool: [
-            auto: [
-                "16": "JgBQAAAB...",         // ← All temps/modes
-                "17": "JgBQAAAB...",
-                // ... 16-30°C for each fan speed
-            ],
-            low: [ ... ],
-            mid: [ ... ],
-            high: [ ... ]
-        ],
-        heat: [ ... ],                       // ← All modes
-        fan_only: [ ... ]
+        [name: "power_off", tuya_code: "JgBQAAABJJISExM5..."],  // ← Sub-second access
+        [name: "16_cool_auto", tuya_code: "JgBQAAAB..."],
+        [name: "17_cool_auto", tuya_code: "JgBQAAAB..."],
+        [name: "24_cool_auto", tuya_code: "JgBQAAAB..."],
+        [name: "24_cool_high", tuya_code: "JgBQAAAB..."],
+        [name: "24_heat_auto", tuya_code: "JgBQAAAB..."],
+        // ... 200+ commands for all temp/mode/fan combinations
     ],
 
     currentState: [mode: "cool", temp: 24, fan: "auto"]
@@ -117,27 +106,34 @@ state.hvacConfig = [
 ### Runtime Command Execution
 
 ```groovy
-// driver.groovy line 330-354
-def hvacTurnOff(final String description) {
-    info "hvacTurnOff()"
+// driver.groovy - hvacTurnOff()
+def hvacTurnOff() {
+    info 'hvacTurnOff()'
 
-    // STEP 1: Validate (< 1ms - in-memory check)
-    if (state.hvacConfig == null || state.hvacConfig.offCommand == null) {
-        error "HVAC not configured"
+    // STEP 1: Validate config exists (< 1ms - in-memory check)
+    if (!state.hvacConfig) {
+        error 'HVAC not configured - run HVAC Setup Wizard first'
         return
     }
 
-    // STEP 2: Read from LOCAL state (< 1ms - Map lookup)
+    // STEP 2: Find power_off in commands array (< 1ms - array search)
     // NO NETWORK CALL
     // NO APP DEPENDENCY
     // NO EXTERNAL API
-    sendCode(state.hvacConfig.offCommand)
+    def commands = state.hvacConfig.commands
+    def offCmd = commands.find { it.name?.toLowerCase() == 'power_off' }
 
-    // STEP 3: Update local state (< 1ms)
-    state.hvacConfig.currentState.mode = "off"
-    doSendEvent(name: "hvacCurrentState", value: "OFF")
+    if (!offCmd || !offCmd.tuya_code) {
+        error 'No OFF command found in configuration'
+        return
+    }
 
-    info "HVAC turned off"
+    // STEP 3: Send code (< 1ms)
+    info 'Sending HVAC OFF command'
+    sendCode(offCmd.tuya_code)
+
+    // STEP 4: Update local state (< 1ms)
+    state.hvacConfig.currentState = [mode: 'off', temp: null, fan: null]
 }
 ```
 
@@ -166,7 +162,7 @@ def sendCode(final String codeNameOrBase64CodeInput) {
 | Operation | Time | Location | Dependency |
 |-----------|------|----------|------------|
 | State validation | <1ms | Driver RAM | None |
-| Map lookup (offCommand) | <1ms | Driver RAM | None |
+| Array search (power_off) | <1ms | Driver RAM | None |
 | String processing | <1ms | Driver RAM | None |
 | Zigbee transmission start | <1ms | Driver → Hub | Zigbee radio |
 | Zigbee protocol (chunked) | 50-100ms | Hub → IR Blaster | Zigbee network |
@@ -175,7 +171,7 @@ def sendCode(final String codeNameOrBase64CodeInput) {
 
 ## Zero External Dependencies at Runtime
 
-✅ **NO** GitHub API calls
+✅ **NO** Maestro API calls (only during setup)
 ✅ **NO** Internet access required
 ✅ **NO** App execution (wizard runs only during setup)
 ✅ **NO** Cloud services
@@ -189,10 +185,10 @@ def sendCode(final String codeNameOrBase64CodeInput) {
 | Aspect | Setup Time | Runtime |
 |--------|------------|---------|
 | **Frequency** | Once per device | Every command |
-| **Network** | Yes (GitHub API) | No |
+| **Network** | Yes (Maestro API) | No |
 | **App execution** | Yes (wizard) | No |
 | **Driver execution** | Yes (save config) | Yes (read config) |
-| **Performance** | 5-30 seconds | <200ms |
+| **Performance** | 5-15 seconds | <200ms |
 | **Acceptable?** | Yes (one-time) | Yes (sub-second) |
 
 ## Code Comments for Performance
@@ -200,18 +196,18 @@ def sendCode(final String codeNameOrBase64CodeInput) {
 The driver includes performance-critical comments:
 
 ```groovy
-// Line 330
 /**
  * Turn off HVAC using configured off command
  *
  * PERFORMANCE: Sub-second execution
- * - Reads from local state.hvacConfig.offCommand (no network)
+ * - Finds power_off in local commands array (no network)
  * - No app dependency (wizard only runs during setup)
  * - Total time: <200ms including Zigbee transmission
  */
-def hvacTurnOff(final String description) {
-    // All data is already local - just read and send
-    sendCode(state.hvacConfig.offCommand)
+def hvacTurnOff() {
+    // All data is already local - just search array and send
+    def offCmd = state.hvacConfig.commands.find { it.name?.toLowerCase() == 'power_off' }
+    sendCode(offCmd.tuya_code)
 }
 ```
 

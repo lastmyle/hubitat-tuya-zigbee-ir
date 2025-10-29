@@ -126,7 +126,7 @@ def mainPage() {
                 input "debugLogging", "bool",
                       title: "Enable Debug Logging",
                       description: "Show detailed debug information in logs and UI",
-                      defaultValue: false,
+                      defaultValue: true,
                       required: false
             }
         }
@@ -211,10 +211,10 @@ def learnCode() {
         section("Instructions") {
             paragraph "<b>Step 1:</b> Click the 'Learn IR Code' button below"
             paragraph "<b>Step 2:</b> Wait for the IR blaster LED to light up"
-            paragraph "<b>Step 3:</b> Within 5 seconds, press a button on your physical HVAC remote"
+            paragraph "<b>Step 3:</b> Press any button on your physical HVAC remote"
             paragraph ""
-            paragraph "<b>Recommended button:</b> Cool mode, 24°C, Auto fan"
-            paragraph "(This gives the best chance of automatic detection)"
+            paragraph "<b>Recommended buttons:</b> OFF, or Cool mode at 24°C with Auto fan"
+            paragraph "(The device will stay in learning mode for 10-15 seconds)"
         }
 
         section("Action") {
@@ -254,8 +254,7 @@ def learnCode() {
                 if (state.wizardState.detectedModel) {
                     paragraph "<hr>"
                     paragraph "✅ <b style='color: green;'>Model Auto-Detected!</b>"
-                    paragraph "Model: ${state.wizardState.detectedModel.model}"
-                    paragraph "SmartIR ID: ${state.wizardState.detectedModel.smartIrId}"
+                    paragraph "Protocol: ${state.wizardState.detectedModel.smartIrId}"
                     paragraph "<hr>"
                     paragraph "<b>Click 'Next' below to verify the detected model...</b>"
 
@@ -272,7 +271,6 @@ def learnCode() {
             paragraph "• Make sure IR blaster LED lights up when learning"
             paragraph "• Hold remote 6-12 inches from IR blaster"
             paragraph "• Press and release remote button quickly"
-            paragraph "• Avoid fluorescent lights (they can interfere with IR)"
         }
 
         section("Re-learn") {
@@ -287,18 +285,6 @@ def learnCode() {
                 paragraph "Learning in progress: ${state.wizardState?.learningInProgress}"
                 paragraph "Ready for next page: ${state.wizardState?.readyForNextPage}"
                 paragraph "Auto-redirect: ${autoRedirect}"
-
-                if (state.wizardState?.apiResponse) {
-                    paragraph "<hr>"
-                    paragraph "<b>Raw API Response:</b>"
-                    paragraph "<pre style='font-size:10px; overflow:auto'>${groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(state.wizardState.apiResponse))}</pre>"
-                }
-
-                if (state.wizardState?.learnedCode) {
-                    paragraph "<hr>"
-                    paragraph "<b>Full Learned Code:</b>"
-                    paragraph "<pre style='font-size:10px; overflow:auto'>${state.wizardState.learnedCode}</pre>"
-                }
             }
         }
     }
@@ -611,7 +597,6 @@ def saveConfigToDevice() {
         // Build full configuration
         def config = [
             model: detectedModel.model,
-            smartIrId: detectedModel.smartIrId,
             commands: modelData.commands ?: [:],
             minTemperature: modelData.minTemperature ?: 16,
             maxTemperature: modelData.maxTemperature ?: 30,
