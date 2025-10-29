@@ -76,10 +76,18 @@ metadata {
             [name: 'Config JSON*', type: 'JSON_OBJECT', description: 'DO NOT SET MANUALLY - Used by HVAC Setup Wizard to configure HVAC control. Stores ALL IR codes (~200+ commands) locally for instant operation without network access.']
         ]
 
+        // HVAC Control Commands (for automations and manual control)
+        command 'hvacTurnOff'
+        command 'hvacSendCommand', [
+            [name: 'Mode*', type: 'ENUM', constraints: ['cool', 'heat', 'dry', 'fan', 'auto'], description: 'Operation mode'],
+            [name: 'Temperature*', type: 'ENUM', constraints: ['16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30'], description: 'Temperature in Celsius'],
+            [name: 'Fan Speed*', type: 'ENUM', constraints: ['auto', 'quiet', 'low', 'medium', 'high'], description: 'Fan speed']
+        ]
+        command 'hvacRestoreState'
+
         // Readonly HVAC Configuration Attributes
         attribute 'lastLearnedCode', 'STRING'
         attribute 'hvacModel', 'STRING'
-        attribute 'hvacSmartIrId', 'STRING'
         attribute 'hvacConfigured', 'STRING'
 
         // Note, my case says ZS06, but this is what Device Get Info tells me the fingerprint is
@@ -183,14 +191,12 @@ def sendCode(final String codeNameOrBase64CodeInput) {
  *
  * @param configJson Map containing:
  *   - model: String (e.g., "CS/CU-xxxx Series")
- *   - smartIrId: String (e.g., "1020")
- *   - offCommand: String (Base64 IR code for off) - CRITICAL for sub-second performance
- *   - commands: Map of ALL IR codes indexed by mode/temp/fan (local storage ~50KB)
+ *   - commands: Array of ALL IR codes (including off) (local storage ~50KB)
  */
 def setHvacConfig(final Map configJson) {
-    info "setHvacConfig(${configJson?.smartIrId})"
+    info "setHvacConfig(${configJson?.model})"
 
-    if (!configJson || !configJson.smartIrId) {
+    if (!configJson || !configJson.commands) {
         error 'Invalid config: missing required fields'
         return
     }
@@ -199,15 +205,12 @@ def setHvacConfig(final Map configJson) {
     // This enables sub-second runtime commands with NO network dependency
     state.hvacConfig = [
         model: configJson.model,
-        smartIrId: configJson.smartIrId,
-        offCommand: configJson.offCommand,           // ← Critical: OFF command stored locally
-        commands: configJson.commands ?: [:],        // ← All 200+ commands stored locally
+        commands: configJson.commands ?: [],        // ← All 200+ commands stored locally (including off)
         currentState: [mode: 'off', temp: null, fan: null]
     ]
 
     // Update readonly attributes for display
     doSendEvent(name: 'hvacModel', value: configJson.model ?: 'Unknown')
-    doSendEvent(name: 'hvacSmartIrId', value: configJson.smartIrId)
     doSendEvent(name: 'hvacConfigured', value: 'Yes')
 
     info 'HVAC configuration saved successfully'
@@ -221,6 +224,108 @@ def setHvacConfig(final Map configJson) {
  */
 Map getHvacConfig() {
     return state.hvacConfig
+}
+
+
+/*********
+ * HVAC CONTROL COMMANDS
+ */
+
+/**
+ * Turn off the HVAC unit
+ * Sends the OFF IR code stored during configuration
+ */
+def hvacTurnOff() {
+    info 'hvacTurnOff()'
+
+    if (!state.hvacConfig) {
+        error 'HVAC not configured - run HVAC Setup Wizard first'
+        return
+    }
+
+    // Commands are stored as array: [{name: "power_off", tuya_code: "..."}, ...]
+    def commands = state.hvacConfig.commands
+    if (!commands || !(commands instanceof List)) {
+        error 'No commands configured or invalid format'
+        return
+    }
+
+    // Find power_off command
+    def offCmd = commands.find { it.name?.toLowerCase() == 'power_off' }
+    if (!offCmd || !offCmd.tuya_code) {
+        error 'No OFF command found in configuration'
+        return
+    }
+
+    info 'Sending HVAC OFF command'
+    sendCode(offCmd.tuya_code)
+
+    // Update current state
+    state.hvacConfig.currentState = [mode: 'off', temp: null, fan: null]
+}
+
+/**
+ * Send a specific HVAC command
+ * @param mode Operation mode (cool, heat, dry, fan, auto)
+ * @param temp Temperature in Celsius
+ * @param fan Fan speed (auto, quiet, low, medium, high)
+ */
+def hvacSendCommand(String mode, Number temp, String fan) {
+    info "hvacSendCommand(mode=${mode}, temp=${temp}, fan=${fan})"
+
+    // Convert temperature to integer
+    Integer tempInt = temp.intValue()
+
+    if (!state.hvacConfig) {
+        error 'HVAC not configured - run HVAC Setup Wizard first'
+        return
+    }
+
+    // Commands are stored as array: [{name: "24_cool_auto", tuya_code: "..."}, ...]
+    def commands = state.hvacConfig.commands
+    if (!commands || !(commands instanceof List)) {
+        error 'No commands configured or invalid format'
+        return
+    }
+
+    // Construct single command name from parameters: "24_cool_auto"
+    String commandName = "${tempInt}_${mode}_${fan}"
+    def cmd = commands.find { it.name?.toLowerCase() == commandName.toLowerCase() }
+
+    if (!cmd || !cmd.tuya_code) {
+        error "Command '${commandName}' not found in configuration"
+        return
+    }
+
+    // Send the single command
+    info "Sending HVAC command: ${cmd.name}"
+    sendCode(cmd.tuya_code)
+
+    // Update current state
+    state.hvacConfig.currentState = [mode: mode, temp: tempInt, fan: fan]
+    info "✓ Command sent: ${mode} ${tempInt}°C ${fan}"
+}
+
+/**
+ * Restore the last known HVAC state
+ * If unit was off, does nothing
+ */
+def hvacRestoreState() {
+    info 'hvacRestoreState()'
+
+    if (!state.hvacConfig) {
+        error 'HVAC not configured - run HVAC Setup Wizard first'
+        return
+    }
+
+    def currentState = state.hvacConfig.currentState
+    if (!currentState || currentState.mode == 'off') {
+        info 'Last state was OFF or unknown - nothing to restore'
+        return
+    }
+
+    info "Restoring state: ${currentState.mode} ${currentState.temp}°C ${currentState.fan}"
+    hvacSendCommand(currentState.mode, currentState.temp, currentState.fan)
 }
 
 

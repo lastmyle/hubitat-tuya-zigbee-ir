@@ -42,36 +42,93 @@ preferences {
  */
 
 def mainPage() {
-    dynamicPage(name: "mainPage", title: "Maestro Tuya Zigbee HVAC Setup Wizard", uninstall: true, install: false, nextPage: "selectDevice") {
-        section("Welcome") {
-            paragraph "This wizard will help you configure your HVAC IR remote control using automatic protocol detection."
-            paragraph "You will need:\n• The physical HVAC remote\n• Access to the IR blaster device"
-        }
+    // Check if already configured
+    def isConfigured = irDevice && state.wizardState?.detectedModel
 
-        section("⚠️ Important: One Device Per Wizard") {
-            paragraph "<b>This wizard configures ONE IR blaster device.</b>"
-            paragraph ""
-            paragraph "If you have multiple IR blasters:"
-            paragraph "• Complete setup for the first device"
-            paragraph "• Then install a NEW instance of this wizard for each additional device"
-            paragraph "• Go to: Apps → Add User App → HVAC Setup Wizard"
-        }
+    if (isConfigured) {
+        // Show status page for configured app
+        dynamicPage(name: "mainPage", title: "Maestro HVAC Configuration", uninstall: true, install: true) {
+            section("Current Configuration") {
+                paragraph "<b>Device:</b> ${irDevice.displayName}"
+                def model = state.wizardState.detectedModel
+                if (model) {
+                    paragraph "<b>Protocol:</b> ${model.smartIrId}"
+                    if (model.protocolInfo?.confidence) {
+                        def conf = (model.protocolInfo.confidence * 100).intValue()
+                        paragraph "<b>Detection Confidence:</b> ${conf}%"
+                    }
+                }
+            }
 
-        section("How It Works") {
-            paragraph "The wizard will:\n" +
-                      "1. Select your IR blaster device\n" +
-                      "2. Learn an IR code from your remote\n" +
-                      "3. Automatically detect protocol using cloud API\n" +
-                      "4. Generate complete command set for your HVAC\n" +
-                      "5. Configure the device for complete HVAC control"
-        }
+            section("Test Commands") {
+                paragraph "Send test commands to verify your HVAC configuration:"
+                paragraph ""
 
-        section("Settings") {
-            input "debugLogging", "bool",
-                  title: "Enable Debug Logging",
-                  description: "Show detailed debug information in logs and UI",
-                  defaultValue: false,
-                  required: false
+                // Off command
+                input "testOff", "button", title: "Turn OFF"
+                paragraph ""
+
+                // Cooling commands
+                paragraph "<b>Cooling:</b>"
+                input "testCool16Auto", "button", title: "16°C Cool Auto", width: 4
+                input "testCool24Auto", "button", title: "24°C Cool Auto", width: 4
+                input "testCool24Quiet", "button", title: "24°C Cool Quiet", width: 4
+                input "testCool24High", "button", title: "24°C Cool High", width: 4
+                paragraph ""
+
+                // Heating commands
+                paragraph "<b>Heating:</b>"
+                input "testHeat20Auto", "button", title: "20°C Heat Auto", width: 4
+                input "testHeat24Auto", "button", title: "24°C Heat Auto", width: 4
+                input "testHeat24High", "button", title: "24°C Heat High", width: 4
+            }
+
+            section("Reconfigure") {
+                paragraph "Want to train a different remote or device?"
+                input "reconfigureNow", "button", title: "Reconfigure Device"
+            }
+
+            section("Settings") {
+                input "debugLogging", "bool",
+                      title: "Enable Debug Logging",
+                      description: "Show detailed debug information in logs and UI",
+                      defaultValue: false,
+                      required: false
+            }
+        }
+    } else {
+        // Show welcome wizard for new setup
+        dynamicPage(name: "mainPage", title: "Maestro Tuya Zigbee HVAC Setup Wizard", uninstall: true, install: false, nextPage: "selectDevice") {
+            section("Welcome") {
+                paragraph "This wizard will help you configure your HVAC IR remote control using automatic protocol detection."
+                paragraph "You will need:\n• The physical HVAC remote\n• Access to the IR blaster device"
+            }
+
+            section("⚠️ Important: One Device Per Wizard") {
+                paragraph "<b>This wizard configures ONE IR blaster device.</b>"
+                paragraph ""
+                paragraph "If you have multiple IR blasters:"
+                paragraph "• Complete setup for the first device"
+                paragraph "• Then install a NEW instance of this wizard for each additional device"
+                paragraph "• Go to: Apps → Add User App → HVAC Setup Wizard"
+            }
+
+            section("How It Works") {
+                paragraph "The wizard will:\n" +
+                          "1. Select your IR blaster device\n" +
+                          "2. Learn an IR code from your remote\n" +
+                          "3. Automatically detect protocol using cloud API\n" +
+                          "4. Generate complete command set for your HVAC\n" +
+                          "5. Configure the device for complete HVAC control"
+            }
+
+            section("Settings") {
+                input "debugLogging", "bool",
+                      title: "Enable Debug Logging",
+                      description: "Show detailed debug information in logs and UI",
+                      defaultValue: false,
+                      required: false
+            }
         }
     }
 }
@@ -163,6 +220,17 @@ def learnCode() {
         section("Action") {
             input "triggerLearn", "button", title: "Learn IR Code"
 
+            // Debug: Manual code entry
+            if (settings.debugLogging) {
+                paragraph "<hr>"
+                paragraph "<b>Debug: Manual Code Entry</b>"
+                input "manualCode", "text",
+                      title: "Enter IR Code Manually",
+                      description: "Paste a Tuya Base64 IR code for testing",
+                      required: false
+                input "testManualCode", "button", title: "Test Manual Code"
+            }
+
             // Show current status
             if (state.wizardState?.learningStatus) {
                 paragraph "<hr>"
@@ -219,6 +287,18 @@ def learnCode() {
                 paragraph "Learning in progress: ${state.wizardState?.learningInProgress}"
                 paragraph "Ready for next page: ${state.wizardState?.readyForNextPage}"
                 paragraph "Auto-redirect: ${autoRedirect}"
+
+                if (state.wizardState?.apiResponse) {
+                    paragraph "<hr>"
+                    paragraph "<b>Raw API Response:</b>"
+                    paragraph "<pre style='font-size:10px; overflow:auto'>${groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(state.wizardState.apiResponse))}</pre>"
+                }
+
+                if (state.wizardState?.learnedCode) {
+                    paragraph "<hr>"
+                    paragraph "<b>Full Learned Code:</b>"
+                    paragraph "<pre style='font-size:10px; overflow:auto'>${state.wizardState.learnedCode}</pre>"
+                }
             }
         }
     }
@@ -402,21 +482,28 @@ def matchCodeToModel(String learnedCode) {
             tuya_code: normalizedCode
         ]
 
+        // Convert to JSON string explicitly
+        def jsonBody = groovy.json.JsonOutput.toJson(requestBody)
+        log.debug "Request body: ${jsonBody}"
+
         def params = [
             uri: MAESTRO_API_URL + "/api/identify",
             headers: [
                 "Content-Type": "application/json",
                 "User-Agent": "Hubitat-HVAC-Wizard/1.0"
             ],
-            body: requestBody,
+            body: jsonBody,
             timeout: 30,
-            contentType: "application/json"
+            requestContentType: "application/json"
         ]
 
         def result = null
         httpPost(params) { resp ->
             if (resp.status == 200) {
                 result = resp.data
+                // Store raw API response for debugging
+                if (!state.wizardState) state.wizardState = [:]
+                state.wizardState.apiResponse = result
                 log.info "✓ API response received"
                 log.debug "Response: ${result}"
             } else {
@@ -444,13 +531,14 @@ def matchCodeToModel(String learnedCode) {
             log.info "  Confidence: ${result.confidence}"
         }
 
-        // Return in format compatible with rest of the app
+        // Store commands directly from API (no transformation)
+        // API returns: [{name: "set_temp_24c", tuya_code: "..."}, {name: "set_mode_cool", tuya_code: "..."}, ...]
         return [
             smartIrId: result.protocol,
             model: result.model ?: result.protocol,
             modelData: [
                 supportedModels: result.supportedModels ?: [],
-                commands: result.commands ?: [:],
+                commands: result.commands,  // Store as-is from API
                 minTemperature: result.minTemperature ?: 16,
                 maxTemperature: result.maxTemperature ?: 30,
                 operationModes: result.operationModes ?: [],
@@ -464,9 +552,40 @@ def matchCodeToModel(String learnedCode) {
             notes: result.notes
         ]
 
+    } catch (groovyx.net.http.HttpResponseException e) {
+        log.error "Maestro API returned error: ${e.statusCode} - ${e.message}"
+
+        // Try to get error response body
+        try {
+            def errorBody = e.response?.data
+            if (errorBody) {
+                log.error "API error details: ${errorBody}"
+                // Store error response for debugging
+                if (!state.wizardState) state.wizardState = [:]
+                state.wizardState.apiResponse = [
+                    error: true,
+                    statusCode: e.statusCode,
+                    message: e.message,
+                    details: errorBody
+                ]
+            }
+        } catch (Exception ignored) {
+            // Couldn't parse error response
+        }
+
+        return null
     } catch (Exception e) {
         log.error "Failed to call Maestro API: ${e.message}"
         log.error "Stack trace: ${e}"
+
+        // Store error for debugging
+        if (!state.wizardState) state.wizardState = [:]
+        state.wizardState.apiResponse = [
+            error: true,
+            message: e.message,
+            stackTrace: e.toString()
+        ]
+
         return null
     }
 }
@@ -493,7 +612,6 @@ def saveConfigToDevice() {
         def config = [
             model: detectedModel.model,
             smartIrId: detectedModel.smartIrId,
-            offCommand: modelData.commands?.off,
             commands: modelData.commands ?: [:],
             minTemperature: modelData.minTemperature ?: 16,
             maxTemperature: modelData.maxTemperature ?: 30,
@@ -505,6 +623,12 @@ def saveConfigToDevice() {
         irDevice.setHvacConfig(config)
 
         log.info "HVAC configuration saved to ${irDevice.displayName}"
+
+        // Update app name to include device name for easy identification
+        def newLabel = "Maestro HVAC: ${irDevice.displayName}"
+        app.updateLabel(newLabel)
+        log.info "App renamed to: ${newLabel}"
+
         return true
 
     } catch (Exception e) {
@@ -601,6 +725,13 @@ def updated() {
     log.debug "Re-initializing subscriptions..."
     unsubscribe()
     initialize()
+
+    // Update app label if device is selected and we don't have a custom name
+    if (irDevice && !app.label?.contains(irDevice.displayName)) {
+        def newLabel = "Maestro HVAC: ${irDevice.displayName}"
+        app.updateLabel(newLabel)
+        log.info "App renamed to: ${newLabel}"
+    }
 }
 
 def initialize() {
@@ -691,6 +822,128 @@ def appButtonHandler(btn) {
                 log.error "Failed to trigger learn: ${e.message}"
                 log.error "Full error: ${e}"
                 state.wizardState.learningStatus = "Error: ${e.message}"
+            }
+            break
+
+        case "testManualCode":
+            log.info "=== Testing Manual Code Entry ==="
+            if (settings.manualCode) {
+                log.info "Manual code length: ${settings.manualCode.length()}"
+
+                // Initialize wizard state
+                if (!state.wizardState) state.wizardState = [:]
+
+                // Store the manual code
+                state.wizardState.learnedCode = settings.manualCode
+                state.wizardState.learningInProgress = false
+                state.wizardState.learningStatus = "Testing manual code..."
+
+                // Try to match it
+                def detectedModel = matchCodeToModel(settings.manualCode)
+                if (detectedModel) {
+                    state.wizardState.detectedModel = detectedModel
+                    state.wizardState.matchError = null
+                    state.wizardState.readyForNextPage = true
+                    state.wizardState.learningStatus = "Manual code matched successfully!"
+                    log.info "✓ Manual code matched to ${detectedModel.smartIrId}"
+                } else {
+                    state.wizardState.detectedModel = null
+                    state.wizardState.matchError = "Could not identify protocol"
+                    state.wizardState.readyForNextPage = false
+                    state.wizardState.learningStatus = "Manual code could not be matched"
+                    log.warn "Manual code did not match any protocol"
+                }
+            } else {
+                log.warn "No manual code provided"
+            }
+            break
+
+        case "reconfigureNow":
+            log.info "=== Starting Reconfiguration ==="
+            // Clear wizard state to start fresh
+            state.wizardState = [:]
+            log.info "✓ Wizard state cleared - ready to reconfigure"
+            // User will be redirected to selectDevice page by the page flow
+            break
+
+        // Test command buttons
+        case "testOff":
+            log.info "Sending test command: OFF"
+            if (irDevice?.hasCommand("hvacTurnOff")) {
+                irDevice.hvacTurnOff()
+                log.info "✓ OFF command sent"
+            } else {
+                log.error "Device does not have hvacTurnOff command"
+            }
+            break
+
+        case "testCool16Auto":
+            log.info "Sending test command: 16°C Cool Auto"
+            if (irDevice?.hasCommand("hvacSendCommand")) {
+                irDevice.hvacSendCommand("cool", 16, "auto")
+                log.info "✓ Cool 16°C Auto command sent"
+            } else {
+                log.error "Device does not have hvacSendCommand command"
+            }
+            break
+
+        case "testCool24Auto":
+            log.info "Sending test command: 24°C Cool Auto"
+            if (irDevice?.hasCommand("hvacSendCommand")) {
+                irDevice.hvacSendCommand("cool", 24, "auto")
+                log.info "✓ Cool 24°C Auto command sent"
+            } else {
+                log.error "Device does not have hvacSendCommand command"
+            }
+            break
+
+        case "testCool24Quiet":
+            log.info "Sending test command: 24°C Cool Quiet"
+            if (irDevice?.hasCommand("hvacSendCommand")) {
+                irDevice.hvacSendCommand("cool", 24, "quiet")
+                log.info "✓ Cool 24°C Quiet command sent"
+            } else {
+                log.error "Device does not have hvacSendCommand command"
+            }
+            break
+
+        case "testCool24High":
+            log.info "Sending test command: 24°C Cool High"
+            if (irDevice?.hasCommand("hvacSendCommand")) {
+                irDevice.hvacSendCommand("cool", 24, "high")
+                log.info "✓ Cool 24°C High command sent"
+            } else {
+                log.error "Device does not have hvacSendCommand command"
+            }
+            break
+
+        case "testHeat20Auto":
+            log.info "Sending test command: 20°C Heat Auto"
+            if (irDevice?.hasCommand("hvacSendCommand")) {
+                irDevice.hvacSendCommand("heat", 20, "auto")
+                log.info "✓ Heat 20°C Auto command sent"
+            } else {
+                log.error "Device does not have hvacSendCommand command"
+            }
+            break
+
+        case "testHeat24Auto":
+            log.info "Sending test command: 24°C Heat Auto"
+            if (irDevice?.hasCommand("hvacSendCommand")) {
+                irDevice.hvacSendCommand("heat", 24, "auto")
+                log.info "✓ Heat 24°C Auto command sent"
+            } else {
+                log.error "Device does not have hvacSendCommand command"
+            }
+            break
+
+        case "testHeat24High":
+            log.info "Sending test command: 24°C Heat High"
+            if (irDevice?.hasCommand("hvacSendCommand")) {
+                irDevice.hvacSendCommand("heat", 24, "high")
+                log.info "✓ Heat 24°C High command sent"
+            } else {
+                log.error "Device does not have hvacSendCommand command"
             }
             break
 
