@@ -267,14 +267,14 @@ def hvacTurnOff() {
 /**
  * Send a specific HVAC command
  * @param mode Operation mode (cool, heat, dry, fan, auto)
- * @param temp Temperature in Celsius
+ * @param temp Temperature in Celsius (String when called from UI/rules)
  * @param fan Fan speed (auto, quiet, low, medium, high)
  */
-def hvacSendCommand(String mode, Number temp, String fan) {
+def hvacSendCommand(String mode, String temp, String fan) {
     info "hvacSendCommand(mode=${mode}, temp=${temp}, fan=${fan})"
 
-    // Convert temperature to integer
-    Integer tempInt = temp.intValue()
+    // Convert temperature to integer (received as String from Hubitat UI/rules)
+    Integer tempInt = temp.toInteger()
 
     if (!state.hvacConfig) {
         error 'HVAC not configured - run HVAC Setup Wizard first'
