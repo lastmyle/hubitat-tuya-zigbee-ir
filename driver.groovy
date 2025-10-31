@@ -758,11 +758,7 @@ def handleDoneReceiving(final Map message) {
     final String code = encodeBase64(seqData.buffer.toArray() as byte[])
     info "learned code: ${code}"
 
-    // Add a newline every 25 characters so it wraps on the Hubitat UI
-    // Otherwise the code overflows the page, making it hard to copy
-    // We remove all whitespace in sendCode to undo this
-    final String eventValue = code.split('(?<=\\G.{25})').join('\n')
-    doSendEvent(name: 'lastLearnedCode', value: eventValue, descriptionText: "${device} lastLearnedCode is ${code}".toString())
+    doSendEvent(name: 'lastLearnedCode', value: code, descriptionText: "${device} lastLearnedCode is ${code}".toString())
 
     final String optionalCodeName = pendingLearnCodeNames().pop()
     if (optionalCodeName != null) {
