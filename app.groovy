@@ -865,7 +865,7 @@ def appButtonHandler(btn) {
         case "testCool16Auto":
             log.info "Sending test command: 16°C Cool Auto"
             if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("cool", 16, "auto")
+                irDevice.hvacSendCommand("cool", "16", "auto")
                 log.info "✓ Cool 16°C Auto command sent"
             } else {
                 log.error "Device does not have hvacSendCommand command"
@@ -875,7 +875,7 @@ def appButtonHandler(btn) {
         case "testCool24Auto":
             log.info "Sending test command: 24°C Cool Auto"
             if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("cool", 24, "auto")
+                irDevice.hvacSendCommand("cool", "24", "auto")
                 log.info "✓ Cool 24°C Auto command sent"
             } else {
                 log.error "Device does not have hvacSendCommand command"
@@ -885,7 +885,7 @@ def appButtonHandler(btn) {
         case "testCool24Quiet":
             log.info "Sending test command: 24°C Cool Quiet"
             if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("cool", 24, "quiet")
+                irDevice.hvacSendCommand("cool", "24", "quiet")
                 log.info "✓ Cool 24°C Quiet command sent"
             } else {
                 log.error "Device does not have hvacSendCommand command"
@@ -895,7 +895,7 @@ def appButtonHandler(btn) {
         case "testCool24High":
             log.info "Sending test command: 24°C Cool High"
             if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("cool", 24, "high")
+                irDevice.hvacSendCommand("cool", "24", "high")
                 log.info "✓ Cool 24°C High command sent"
             } else {
                 log.error "Device does not have hvacSendCommand command"
@@ -905,7 +905,7 @@ def appButtonHandler(btn) {
         case "testHeat20Auto":
             log.info "Sending test command: 20°C Heat Auto"
             if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("heat", 20, "auto")
+                irDevice.hvacSendCommand("heat", "20", "auto")
                 log.info "✓ Heat 20°C Auto command sent"
             } else {
                 log.error "Device does not have hvacSendCommand command"
@@ -915,7 +915,7 @@ def appButtonHandler(btn) {
         case "testHeat24Auto":
             log.info "Sending test command: 24°C Heat Auto"
             if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("heat", 24, "auto")
+                irDevice.hvacSendCommand("heat", "24", "auto")
                 log.info "✓ Heat 24°C Auto command sent"
             } else {
                 log.error "Device does not have hvacSendCommand command"
@@ -925,7 +925,7 @@ def appButtonHandler(btn) {
         case "testHeat24High":
             log.info "Sending test command: 24°C Heat High"
             if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("heat", 24, "high")
+                irDevice.hvacSendCommand("heat", "24", "high")
                 log.info "✓ Heat 24°C High command sent"
             } else {
                 log.error "Device does not have hvacSendCommand command"
