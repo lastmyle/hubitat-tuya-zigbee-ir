@@ -64,23 +64,29 @@ def mainPage() {
                 paragraph "Send test commands to verify your HVAC configuration:"
                 paragraph ""
 
-                // Off command
-                input "testOff", "button", title: "Turn OFF"
+                // Power commands
+                input "testPowerOn", "button", title: "Power ON", width: 6
+                input "testPowerOff", "button", title: "Power OFF", width: 6
                 paragraph ""
 
                 // Cooling commands
-                paragraph "<b>Cooling:</b>"
+                paragraph "<b>16°C Cool:</b>"
+                input "testCool16Quiet", "button", title: "16°C Cool Quiet", width: 4
                 input "testCool16Auto", "button", title: "16°C Cool Auto", width: 4
-                input "testCool24Auto", "button", title: "24°C Cool Auto", width: 4
+                input "testCool16High", "button", title: "16°C Cool High", width: 4
+                paragraph ""
+
+                paragraph "<b>24°C Cool:</b>"
                 input "testCool24Quiet", "button", title: "24°C Cool Quiet", width: 4
+                input "testCool24Auto", "button", title: "24°C Cool Auto", width: 4
                 input "testCool24High", "button", title: "24°C Cool High", width: 4
                 paragraph ""
 
                 // Heating commands
-                paragraph "<b>Heating:</b>"
-                input "testHeat20Auto", "button", title: "20°C Heat Auto", width: 4
-                input "testHeat24Auto", "button", title: "24°C Heat Auto", width: 4
-                input "testHeat24High", "button", title: "24°C Heat High", width: 4
+                paragraph "<b>30°C Heat:</b>"
+                input "testHeat30Quiet", "button", title: "30°C Heat Quiet", width: 4
+                input "testHeat30Auto", "button", title: "30°C Heat Auto", width: 4
+                input "testHeat30High", "button", title: "30°C Heat High", width: 4
             }
 
             section("Reconfigure") {
@@ -273,20 +279,6 @@ def learnCode() {
             paragraph "• Press and release remote button quickly"
         }
 
-        section("Re-learn") {
-            if (state.wizardState?.learnedCode) {
-                href "learnCode", title: "Learn Different Code", description: "Try again with a different remote button"
-            }
-        }
-
-        // Debug section (only shown if debug logging enabled)
-        if (settings.debugLogging) {
-            section("Debug Info") {
-                paragraph "Learning in progress: ${state.wizardState?.learningInProgress}"
-                paragraph "Ready for next page: ${state.wizardState?.readyForNextPage}"
-                paragraph "Auto-redirect: ${autoRedirect}"
-            }
-        }
     }
 }
 
@@ -378,54 +370,41 @@ def complete() {
                 paragraph ""
                 paragraph "<b>Device:</b> ${irDevice.displayName}"
                 paragraph "<b>Protocol:</b> ${state.wizardState?.detectedModel?.smartIrId}"
-                if (state.wizardState?.detectedModel?.protocolInfo?.confidence) {
-                    def conf = (state.wizardState.detectedModel.protocolInfo.confidence * 100).intValue()
-                    paragraph "<b>Detection Confidence:</b> ${conf}%"
-                }
             }
 
-            section("Available Commands") {
-                paragraph "Your device now supports these commands:"
-                paragraph "• <b>hvacTurnOff()</b> - Turn off HVAC"
-                paragraph "• <b>hvacRestoreState()</b> - Restore to last known state"
-                paragraph "• <b>hvacSendCommand(mode, temp, fan)</b> - Send specific command"
-                paragraph "   Example: hvacSendCommand('cool', 24, 'auto')"
-            }
-
-            section("Integration Examples") {
-                paragraph "<b>In Rule Machine:</b>"
-                paragraph "• Trigger: Location mode changes to Away"
-                paragraph "• Action: Run custom action → hvacTurnOff()"
+            section("Test Commands") {
+                paragraph "Test your HVAC configuration:"
                 paragraph ""
-                paragraph "• Trigger: Location mode changes to Home"
-                paragraph "• Action: Run custom action → hvacRestoreState()"
-            }
 
-            section("Next Steps") {
-                paragraph "• Test the commands in the device page"
-                paragraph "• Create automations in Rule Machine"
-                paragraph "• Add device to your dashboards"
+                // Power commands
+                input "testPowerOn", "button", title: "Power ON", width: 6
+                input "testPowerOff", "button", title: "Power OFF", width: 6
+                paragraph ""
+
+                // Cooling commands
+                paragraph "<b>16°C Cool:</b>"
+                input "testCool16Quiet", "button", title: "16°C Cool Quiet", width: 4
+                input "testCool16Auto", "button", title: "16°C Cool Auto", width: 4
+                input "testCool16High", "button", title: "16°C Cool High", width: 4
+                paragraph ""
+
+                paragraph "<b>24°C Cool:</b>"
+                input "testCool24Quiet", "button", title: "24°C Cool Quiet", width: 4
+                input "testCool24Auto", "button", title: "24°C Cool Auto", width: 4
+                input "testCool24High", "button", title: "24°C Cool High", width: 4
+                paragraph ""
+
+                // Heating commands
+                paragraph "<b>30°C Heat:</b>"
+                input "testHeat30Quiet", "button", title: "30°C Heat Quiet", width: 4
+                input "testHeat30Auto", "button", title: "30°C Heat Auto", width: 4
+                input "testHeat30High", "button", title: "30°C Heat High", width: 4
             }
         } else {
             section("Error ⚠️") {
                 paragraph "Failed to save configuration. Check logs for details."
                 href "mainPage", title: "Start Over", description: "Restart the wizard"
             }
-        }
-
-        section("What's Next?") {
-            paragraph "<b>This wizard instance is now complete.</b>"
-            paragraph ""
-            paragraph "You can:"
-            paragraph "• <b>Keep this wizard installed</b> - Allows you to reconfigure this device later"
-            paragraph "• <b>Uninstall this wizard</b> - The device will keep its configuration"
-            paragraph ""
-            paragraph "To configure additional IR blasters:"
-            paragraph "Go to Apps → Add User App → HVAC Setup Wizard (creates a new instance)"
-        }
-
-        section("Reconfigure This Device") {
-            href "mainPage", title: "Restart Setup Wizard", description: "Reconfigure ${irDevice?.displayName}"
         }
     }
 }
@@ -852,83 +831,113 @@ def appButtonHandler(btn) {
             break
 
         // Test command buttons
-        case "testOff":
-            log.info "Sending test command: OFF"
-            if (irDevice?.hasCommand("hvacTurnOff")) {
-                irDevice.hvacTurnOff()
-                log.info "✓ OFF command sent"
+        case "testPowerOn":
+            log.info "Sending test command: power_on"
+            if (irDevice?.hasCommand("hvacSendCommandName")) {
+                irDevice.hvacSendCommandName("power_on")
+                log.info "✓ power_on command sent"
             } else {
-                log.error "Device does not have hvacTurnOff command"
+                log.error "Device does not have hvacSendCommandName command"
+            }
+            break
+
+        case "testPowerOff":
+            log.info "Sending test command: power_off"
+            if (irDevice?.hasCommand("hvacSendCommandName")) {
+                irDevice.hvacSendCommandName("power_off")
+                log.info "✓ power_off command sent"
+            } else {
+                log.error "Device does not have hvacSendCommandName command"
+            }
+            break
+
+        case "testCool16Quiet":
+            log.info "Sending test command: 16_cool_quiet"
+            if (irDevice?.hasCommand("hvacSendCommandName")) {
+                irDevice.hvacSendCommandName("16_cool_quiet")
+                log.info "✓ 16_cool_quiet command sent"
+            } else {
+                log.error "Device does not have hvacSendCommandName command"
             }
             break
 
         case "testCool16Auto":
-            log.info "Sending test command: 16°C Cool Auto"
-            if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("cool", "16", "auto")
-                log.info "✓ Cool 16°C Auto command sent"
+            log.info "Sending test command: 16_cool_auto"
+            if (irDevice?.hasCommand("hvacSendCommandName")) {
+                irDevice.hvacSendCommandName("16_cool_auto")
+                log.info "✓ 16_cool_auto command sent"
             } else {
-                log.error "Device does not have hvacSendCommand command"
+                log.error "Device does not have hvacSendCommandName command"
             }
             break
 
-        case "testCool24Auto":
-            log.info "Sending test command: 24°C Cool Auto"
-            if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("cool", "24", "auto")
-                log.info "✓ Cool 24°C Auto command sent"
+        case "testCool16High":
+            log.info "Sending test command: 16_cool_high"
+            if (irDevice?.hasCommand("hvacSendCommandName")) {
+                irDevice.hvacSendCommandName("16_cool_high")
+                log.info "✓ 16_cool_high command sent"
             } else {
-                log.error "Device does not have hvacSendCommand command"
+                log.error "Device does not have hvacSendCommandName command"
             }
             break
 
         case "testCool24Quiet":
-            log.info "Sending test command: 24°C Cool Quiet"
-            if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("cool", "24", "quiet")
-                log.info "✓ Cool 24°C Quiet command sent"
+            log.info "Sending test command: 24_cool_quiet"
+            if (irDevice?.hasCommand("hvacSendCommandName")) {
+                irDevice.hvacSendCommandName("24_cool_quiet")
+                log.info "✓ 24_cool_quiet command sent"
             } else {
-                log.error "Device does not have hvacSendCommand command"
+                log.error "Device does not have hvacSendCommandName command"
+            }
+            break
+
+        case "testCool24Auto":
+            log.info "Sending test command: 24_cool_auto"
+            if (irDevice?.hasCommand("hvacSendCommandName")) {
+                irDevice.hvacSendCommandName("24_cool_auto")
+                log.info "✓ 24_cool_auto command sent"
+            } else {
+                log.error "Device does not have hvacSendCommandName command"
             }
             break
 
         case "testCool24High":
-            log.info "Sending test command: 24°C Cool High"
-            if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("cool", "24", "high")
-                log.info "✓ Cool 24°C High command sent"
+            log.info "Sending test command: 24_cool_high"
+            if (irDevice?.hasCommand("hvacSendCommandName")) {
+                irDevice.hvacSendCommandName("24_cool_high")
+                log.info "✓ 24_cool_high command sent"
             } else {
-                log.error "Device does not have hvacSendCommand command"
+                log.error "Device does not have hvacSendCommandName command"
             }
             break
 
-        case "testHeat20Auto":
-            log.info "Sending test command: 20°C Heat Auto"
-            if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("heat", "20", "auto")
-                log.info "✓ Heat 20°C Auto command sent"
+        case "testHeat30Quiet":
+            log.info "Sending test command: 30_heat_quiet"
+            if (irDevice?.hasCommand("hvacSendCommandName")) {
+                irDevice.hvacSendCommandName("30_heat_quiet")
+                log.info "✓ 30_heat_quiet command sent"
             } else {
-                log.error "Device does not have hvacSendCommand command"
+                log.error "Device does not have hvacSendCommandName command"
             }
             break
 
-        case "testHeat24Auto":
-            log.info "Sending test command: 24°C Heat Auto"
-            if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("heat", "24", "auto")
-                log.info "✓ Heat 24°C Auto command sent"
+        case "testHeat30Auto":
+            log.info "Sending test command: 30_heat_auto"
+            if (irDevice?.hasCommand("hvacSendCommandName")) {
+                irDevice.hvacSendCommandName("30_heat_auto")
+                log.info "✓ 30_heat_auto command sent"
             } else {
-                log.error "Device does not have hvacSendCommand command"
+                log.error "Device does not have hvacSendCommandName command"
             }
             break
 
-        case "testHeat24High":
-            log.info "Sending test command: 24°C Heat High"
-            if (irDevice?.hasCommand("hvacSendCommand")) {
-                irDevice.hvacSendCommand("heat", "24", "high")
-                log.info "✓ Heat 24°C High command sent"
+        case "testHeat30High":
+            log.info "Sending test command: 30_heat_high"
+            if (irDevice?.hasCommand("hvacSendCommandName")) {
+                irDevice.hvacSendCommandName("30_heat_high")
+                log.info "✓ 30_heat_high command sent"
             } else {
-                log.error "Device does not have hvacSendCommand command"
+                log.error "Device does not have hvacSendCommandName command"
             }
             break
 

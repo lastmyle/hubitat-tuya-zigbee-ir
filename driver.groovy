@@ -83,6 +83,9 @@ metadata {
             [name: 'Temperature*', type: 'ENUM', constraints: ['16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30'], description: 'Temperature in Celsius'],
             [name: 'Fan Speed*', type: 'ENUM', constraints: ['auto', 'quiet', 'low', 'medium', 'high'], description: 'Fan speed']
         ]
+        command 'hvacSendCommandName', [
+            [name: 'Command Name*', type: 'STRING', description: 'Command name (e.g., "24_cool_auto", "power_on")']
+        ]
         command 'hvacRestoreState'
 
         // Readonly HVAC Configuration Attributes
@@ -265,16 +268,11 @@ def hvacTurnOff() {
 }
 
 /**
- * Send a specific HVAC command
- * @param mode Operation mode (cool, heat, dry, fan, auto)
- * @param temp Temperature in Celsius (String when called from UI/rules)
- * @param fan Fan speed (auto, quiet, low, medium, high)
+ * Send HVAC command by name
+ * @param commandName The command name (e.g., "24_cool_auto", "power_on", "power_off")
  */
-def hvacSendCommand(String mode, String temp, String fan) {
-    info "hvacSendCommand(mode=${mode}, temp=${temp}, fan=${fan})"
-
-    // Convert temperature to integer (received as String from Hubitat UI/rules)
-    Integer tempInt = temp.toInteger()
+def hvacSendCommandName(String commandName) {
+    info "hvacSendCommandName(${commandName})"
 
     if (!state.hvacConfig) {
         error 'HVAC not configured - run HVAC Setup Wizard first'
@@ -288,8 +286,7 @@ def hvacSendCommand(String mode, String temp, String fan) {
         return
     }
 
-    // Construct single command name from parameters: "24_cool_auto"
-    String commandName = "${tempInt}_${mode}_${fan}"
+    // Find the command by name
     def cmd = commands.find { it.name?.toLowerCase() == commandName.toLowerCase() }
 
     if (!cmd || !cmd.tuya_code) {
@@ -297,13 +294,50 @@ def hvacSendCommand(String mode, String temp, String fan) {
         return
     }
 
-    // Send the single command
+    // Send the command
     info "Sending HVAC command: ${cmd.name}"
     sendCode(cmd.tuya_code)
 
-    // Update current state
-    state.hvacConfig.currentState = [mode: mode, temp: tempInt, fan: fan]
-    info "✓ Command sent: ${mode} ${tempInt}°C ${fan}"
+    // Parse command name to update state (e.g., "24_cool_auto" -> temp=24, mode=cool, fan=auto)
+    def parts = commandName.split('_')
+    if (parts.size() == 3 && parts[0].isNumber()) {
+        // Regular command: "24_cool_auto"
+        Integer temp = parts[0].toInteger()
+        String mode = parts[1]
+        String fan = parts[2]
+        state.hvacConfig.currentState = [mode: mode, temp: temp, fan: fan]
+        info "✓ Command sent: ${mode} ${temp}°C ${fan}"
+    } else {
+        // Special command: "power_on", "power_off", etc.
+        if (commandName.toLowerCase() in ['power_off', 'off']) {
+            state.hvacConfig.currentState = [mode: 'off', temp: null, fan: null]
+        }
+        info "✓ Command sent: ${commandName}"
+    }
+}
+
+/**
+ * Send a specific HVAC command
+ * @param mode Operation mode (cool, heat, dry, fan, auto, power_on, power_off)
+ * @param temp Temperature in Celsius (String when called from UI/rules, null for special commands)
+ * @param fan Fan speed (auto, quiet, low, medium, high) (null for special commands)
+ */
+def hvacSendCommand(String mode, String temp, String fan) {
+    info "hvacSendCommand(mode=${mode}, temp=${temp}, fan=${fan})"
+
+    // Build command name from parameters
+    String commandName
+    if (mode in ['power_on', 'power_off', 'off']) {
+        // Special commands that don't have temp/fan parameters
+        commandName = mode
+    } else {
+        // Regular commands: "24_cool_auto"
+        Integer tempInt = temp.toInteger()
+        commandName = "${tempInt}_${mode}_${fan}"
+    }
+
+    // Delegate to hvacSendCommandName
+    hvacSendCommandName(commandName)
 }
 
 /**
