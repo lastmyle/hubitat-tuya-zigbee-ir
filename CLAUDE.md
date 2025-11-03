@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Communication Style
+
+Don't appease me. Be direct and technical. Focus on facts and solutions, not validation.
+
 ## Project Overview
 
 This is a Hubitat driver for Tuya Zigbee IR Remote Controls (Model ZS06/TS1201). The driver enables learning and sending IR codes through a Zigbee-connected IR blaster device, integrating with Hubitat's rule engine and virtual devices.
