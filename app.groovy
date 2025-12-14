@@ -142,7 +142,8 @@ def mainPage() {
 def selectDevice() {
     dynamicPage(name: "selectDevice", title: "Select IR Blaster", install: false, nextPage: "learnCode", refreshInterval: irDevice && !getDeviceStatus(irDevice).online ? 5 : 0) {
         section("Device Selection") {
-            input "irDevice", "device.MaestroTuyaZigbeeIRRemoteControl",
+            input name: "irDevice", 
+                  type: "device.MaestroTuyaZigbeeIRRemoteControl",
                   title: "Select Tuya IR Remote Device",
                   required: true,
                   multiple: false,
