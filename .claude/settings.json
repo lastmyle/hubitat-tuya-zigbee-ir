@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "lastmyle": {
+      "source": {
+        "source": "github",
+        "repo": "lastmyle/claude-plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "lastmyle-shared@lastmyle": true
+  }
+}
