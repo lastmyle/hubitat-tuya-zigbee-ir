@@ -96,6 +96,12 @@ metadata {
         attribute 'hvacModel', 'STRING'
         attribute 'hvacConfigured', 'STRING'
 
+        // HVAC State Attributes (for MQTT -> InfluxDB tracking)
+        attribute 'hvacMode', 'ENUM', ['off', 'cool', 'heat', 'dry', 'fan', 'auto']
+        attribute 'hvacTemperature', 'NUMBER'
+        attribute 'hvacFanSpeed', 'ENUM', ['auto', 'quiet', 'low', 'medium', 'high']
+        attribute 'hvacCommand', 'STRING'  // Last command sent (e.g., "24_cool_auto")
+
         // Note, my case says ZS06, but this is what Device Get Info tells me the fingerprint is
         fingerprint profileId: '0104', inClusters: '0000,0004,0005,0003,ED00,E004,0006', outClusters: '0019,000A', manufacturer: '_TZ3290_7v1k4vufotpowp9z', model: 'TS1201', deviceJoinName: 'Tuya Zigbee IR Remote Control'
         }
@@ -268,6 +274,12 @@ def hvacTurnOff() {
 
     // Update current state
     state.hvacConfig.currentState = [mode: 'off', temp: null, fan: null]
+
+    // Emit events for MQTT -> InfluxDB tracking
+    doSendEvent(name: 'hvacMode', value: 'off')
+    doSendEvent(name: 'hvacTemperature', value: 0, unit: '°C')
+    doSendEvent(name: 'hvacFanSpeed', value: 'auto')
+    doSendEvent(name: 'hvacCommand', value: 'power_off')
 }
 
 /**
@@ -309,12 +321,26 @@ def hvacSendCommandName(String commandName) {
         String mode = parts[1]
         String fan = parts[2]
         state.hvacConfig.currentState = [mode: mode, temp: temp, fan: fan]
+
+        // Emit events for MQTT -> InfluxDB tracking
+        doSendEvent(name: 'hvacMode', value: mode)
+        doSendEvent(name: 'hvacTemperature', value: temp, unit: '°C')
+        doSendEvent(name: 'hvacFanSpeed', value: fan)
+        doSendEvent(name: 'hvacCommand', value: commandName)
+
         info "✓ Command sent: ${mode} ${temp}°C ${fan}"
     } else {
         // Special command: "power_on", "power_off", etc.
         if (commandName.toLowerCase() in ['power_off', 'off']) {
             state.hvacConfig.currentState = [mode: 'off', temp: null, fan: null]
+
+            // Emit off state events
+            doSendEvent(name: 'hvacMode', value: 'off')
+            doSendEvent(name: 'hvacTemperature', value: 0, unit: '°C')
+            doSendEvent(name: 'hvacFanSpeed', value: 'auto')
         }
+        doSendEvent(name: 'hvacCommand', value: commandName)
+
         info "✓ Command sent: ${commandName}"
     }
 }
