@@ -1,13 +1,36 @@
 {
+  "enableAllProjectMcpServers": true,
   "extraKnownMarketplaces": {
     "lastmyle": {
       "source": {
         "source": "github",
         "repo": "lastmyle/claude-plugins"
       }
+    },
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    },
+    "claude-code-workflows": {
+      "source": {
+        "source": "github",
+        "repo": "wshobson/agents"
+      }
+    },
+    "netresearch": {
+      "source": {
+        "source": "github",
+        "repo": "netresearch/claude-code-marketplace"
+      }
     }
   },
   "enabledPlugins": {
-    "lastmyle-shared@lastmyle": true
+    "lastmyle-shared@lastmyle": true,
+    "code-review@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true
   }
 }
