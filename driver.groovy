@@ -64,6 +64,9 @@ metadata {
         namespace: 'hubitat.lastmyle.maestro',
         author: 'Lastmyle'
         ) {
+        // Capability required for Maker API visibility
+        capability 'Actuator'
+
         command 'learn', [
             [name: 'Code Name', type: 'STRING', description: 'Name for learned code (optional)']
         ]
