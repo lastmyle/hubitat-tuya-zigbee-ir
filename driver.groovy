@@ -104,6 +104,7 @@ metadata {
 
         // Note, my case says ZS06, but this is what Device Get Info tells me the fingerprint is
         fingerprint profileId: '0104', inClusters: '0000,0004,0005,0003,ED00,E004,0006', outClusters: '0019,000A', manufacturer: '_TZ3290_7v1k4vufotpowp9z', model: 'TS1201', deviceJoinName: 'Tuya Zigbee IR Remote Control'
+        fingerprint profileId: '0104', inClusters: '0000,0004,0005,0003,0001,ED00,E004,0006', outClusters: '0019,000A', manufacturer: '_TZ3290_4axevryg', model: 'TS1201', deviceJoinName: 'Tuya Zigbee IR Remote Control'
         }
 
     preferences {
