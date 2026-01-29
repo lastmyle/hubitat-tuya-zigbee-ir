@@ -25,6 +25,7 @@ definition(
 preferences {
     page(name: "mainPage")
     page(name: "selectDevice")
+    page(name: "selectManufacturer")
     page(name: "learnCode")
     page(name: "verifyModel")
     page(name: "complete")
@@ -140,9 +141,9 @@ def mainPage() {
 }
 
 def selectDevice() {
-    dynamicPage(name: "selectDevice", title: "Select IR Blaster", install: false, nextPage: "learnCode", refreshInterval: irDevice && !getDeviceStatus(irDevice).online ? 5 : 0) {
+    dynamicPage(name: "selectDevice", title: "Select IR Blaster", install: false, nextPage: "selectManufacturer") {
         section("Device Selection") {
-            input name: "irDevice", 
+            input name: "irDevice",
                   type: "device.MaestroTuyaZigbeeIRRemoteControl",
                   title: "Select Tuya IR Remote Device",
                   required: true,
@@ -158,36 +159,9 @@ def selectDevice() {
             subscribe(irDevice, "lastLearnedCode", "codeLearnedHandler")
             log.info "✓ Subscribed to lastLearnedCode event from ${irDevice.displayName}"
 
-            // Get device status
-            def deviceStatus = getDeviceStatus(irDevice)
-
-            section("Device Status") {
+            section("Device Selected") {
                 paragraph "Device: ${irDevice.displayName}"
-
-                if (deviceStatus.online) {
-                    paragraph "✅ <b style='color:green'>Status:</b> ${deviceStatus.status}"
-                } else {
-                    paragraph "❌ <b style='color:red'>Status:</b> ${deviceStatus.status}"
-                    paragraph ""
-                    paragraph "<b>The device appears to be offline or unreachable.</b>"
-                    paragraph ""
-                    paragraph "Please check:"
-                    paragraph "• Device is powered on"
-                    paragraph "• Device is within Zigbee range"
-                    paragraph "• Device is paired to the hub"
-                    paragraph "• Hub's Zigbee radio is functioning"
-                    paragraph ""
-                    paragraph "<i>Page will auto-refresh every 5 seconds to check status...</i>"
-                    paragraph ""
-                    input "forceOffline", "bool",
-                          title: "Proceed anyway (advanced)",
-                          description: "Continue setup even if device appears offline",
-                          defaultValue: false,
-                          required: false
-                }
-
-                // Refresh button
-                href "selectDevice", title: "Refresh Status", description: "Check device status again"
+                paragraph "✅ Ready to continue"
 
                 // Check if device has required methods
                 if (!deviceHasHvacSupport(irDevice)) {
@@ -196,17 +170,82 @@ def selectDevice() {
                     paragraph "Make sure you're using the <b>Lastmyle Tuya Zigbee IR Remote Control</b> driver."
                 }
             }
+        }
+    }
+}
 
-            // Block navigation if device is offline (unless force override)
-            if (!deviceStatus.online && !settings.forceOffline) {
-                section("Next Step") {
-                    paragraph "⚠️ <b>Cannot proceed while device is offline</b>"
-                    paragraph "Please bring the device online or enable 'Proceed anyway' above."
-                }
-                // Remove nextPage to prevent navigation
-                app.updateSetting("nextPage", [type: "text", value: null])
+def selectManufacturer() {
+    // Fetch manufacturers if not already cached
+    if (!state.wizardState?.manufacturers) {
+        fetchManufacturers()
+    }
+
+    // Check if manufacturer was selected and we should auto-redirect
+    def autoRedirect = state.wizardState?.readyForNextPage == true && state.wizardState?.detectedModel
+
+    dynamicPage(name: "selectManufacturer", title: "Select Manufacturer", install: false, nextPage: autoRedirect ? "verifyModel" : null) {
+        section("Select Your HVAC Manufacturer") {
+            paragraph "Choose your HVAC brand from the list below."
+            paragraph "We have pre-configured IR codes for these manufacturers."
+            paragraph ""
+
+            // Get manufacturers from state
+            def manufacturers = state.wizardState?.manufacturers ?: ["Loading..."]
+
+            input "selectedManufacturer", "enum",
+                  options: manufacturers,
+                  title: "HVAC Manufacturer",
+                  required: false,
+                  submitOnChange: true
+
+            input "refreshManufacturers", "button", title: "Refresh List"
+
+            // Show status if manufacturer was selected
+            if (state.wizardState?.manufacturerStatus) {
+                paragraph "<hr>"
+                paragraph "<b>Status:</b> ${state.wizardState.manufacturerStatus}"
+            }
+
+            // If manufacturer selected, show generate button
+            if (settings.selectedManufacturer && !state.wizardState?.detectedModel) {
+                paragraph ""
+                input "generateFromManufacturer", "button", title: "Generate Commands for ${settings.selectedManufacturer}"
+            }
+
+            // Show success if model detected
+            if (state.wizardState?.detectedModel && state.wizardState?.usedManufacturerSelection) {
+                paragraph "<hr>"
+                paragraph "✅ <b style='color: green;'>Commands Generated!</b>"
+                paragraph "Protocol: ${state.wizardState.detectedModel.smartIrId}"
+                paragraph ""
+                paragraph "<b>Click 'Next' below to verify and complete setup...</b>"
             }
         }
+
+        section("Don't See Your Manufacturer?") {
+            paragraph "If your manufacturer isn't listed, you can learn the IR code directly from your remote."
+            href "learnCode", title: "Learn IR Code Manually", description: "Use your physical remote to teach the IR blaster"
+        }
+
+        section("Already Have an IR Code?") {
+            paragraph "Paste a Tuya Base64 IR code to identify the protocol:"
+            input "manualCode", "text",
+                  title: "IR Code",
+                  description: "Paste your Tuya Base64 IR code here",
+                  required: false,
+                  submitOnChange: false
+
+            if (settings.manualCode) {
+                input "testManualCode", "button", title: "Identify Protocol from Code"
+            }
+
+            // Show result if manual code was tested
+            if (state.wizardState?.manualCodeResult) {
+                paragraph "<hr>"
+                paragraph "${state.wizardState.manualCodeResult}"
+            }
+        }
+
     }
 }
 
@@ -413,6 +452,121 @@ def complete() {
 /*********
  * API INTEGRATION
  */
+
+/**
+ * Fetch list of manufacturers with known good codes from API.
+ * Stores result in state.wizardState.manufacturers
+ */
+def fetchManufacturers() {
+    log.info "Fetching manufacturers from Maestro API..."
+
+    try {
+        def params = [
+            uri: MAESTRO_API_URL + "/api/manufacturers",
+            headers: [
+                "User-Agent": "Hubitat-HVAC-Wizard/1.0"
+            ],
+            timeout: 15
+        ]
+
+        httpGet(params) { resp ->
+            if (resp.status == 200) {
+                def manufacturers = resp.data?.manufacturers ?: []
+                log.info "✓ Retrieved ${manufacturers.size()} manufacturers"
+
+                if (!state.wizardState) state.wizardState = [:]
+                state.wizardState.manufacturers = manufacturers
+
+                return manufacturers
+            } else {
+                log.error "API returned status ${resp.status}"
+                return []
+            }
+        }
+    } catch (Exception e) {
+        log.error "Failed to fetch manufacturers: ${e.message}"
+        if (!state.wizardState) state.wizardState = [:]
+        state.wizardState.manufacturers = ["Error loading manufacturers"]
+        return []
+    }
+}
+
+/**
+ * Generate commands for a manufacturer using known good codes.
+ * Calls /api/generate-from-manufacturer endpoint.
+ */
+def generateFromManufacturer(String manufacturer) {
+    log.info "Generating commands for manufacturer: ${manufacturer}"
+
+    if (!manufacturer) {
+        log.error "No manufacturer specified"
+        return null
+    }
+
+    try {
+        def requestBody = [
+            manufacturer: manufacturer
+        ]
+
+        def jsonBody = groovy.json.JsonOutput.toJson(requestBody)
+        log.debug "Request body: ${jsonBody}"
+
+        def params = [
+            uri: MAESTRO_API_URL + "/api/generate-from-manufacturer",
+            headers: [
+                "Content-Type": "application/json",
+                "User-Agent": "Hubitat-HVAC-Wizard/1.0"
+            ],
+            body: jsonBody,
+            timeout: 30,
+            requestContentType: "application/json"
+        ]
+
+        def result = null
+        httpPost(params) { resp ->
+            if (resp.status == 200) {
+                result = resp.data
+                log.info "✓ Commands generated for ${manufacturer}"
+                log.debug "Response: ${result}"
+            } else {
+                log.error "API returned status ${resp.status}"
+                return null
+            }
+        }
+
+        if (!result) {
+            log.warn "No result from API"
+            return null
+        }
+
+        // Transform to same format as matchCodeToModel
+        return [
+            smartIrId: result.protocol,
+            model: result.model ?: result.protocol,
+            modelData: [
+                supportedModels: [],
+                commands: result.commands,
+                minTemperature: result.min_temperature ?: 16,
+                maxTemperature: result.max_temperature ?: 30,
+                operationModes: result.operation_modes ?: [],
+                fanModes: result.fan_modes ?: []
+            ],
+            detectedState: result.detected_state ?: [mode: "unknown", temp: null, fan: null],
+            protocolInfo: [
+                protocol: result.protocol,
+                confidence: result.confidence ?: 1.0
+            ],
+            notes: result.notes
+        ]
+
+    } catch (groovyx.net.http.HttpResponseException e) {
+        log.error "Maestro API returned error: ${e.statusCode} - ${e.message}"
+        return null
+    } catch (Exception e) {
+        log.error "Failed to generate commands: ${e.message}"
+        return null
+    }
+}
 
 /**
  * Identify protocol from learned IR code and generate full command set.
@@ -737,6 +891,44 @@ def appButtonHandler(btn) {
     log.info "Button pressed: ${btn}"
 
     switch (btn) {
+        case "refreshManufacturers":
+            log.info "=== Refreshing Manufacturer List ==="
+            fetchManufacturers()
+            break
+
+        case "generateFromManufacturer":
+            log.info "=== Generating Commands from Manufacturer ==="
+            if (!settings.selectedManufacturer) {
+                log.error "No manufacturer selected"
+                return
+            }
+
+            try {
+                if (!state.wizardState) state.wizardState = [:]
+                state.wizardState.manufacturerStatus = "Generating commands for ${settings.selectedManufacturer}..."
+
+                def detectedModel = generateFromManufacturer(settings.selectedManufacturer)
+
+                if (detectedModel) {
+                    log.info "✅ Commands generated successfully!"
+                    log.info "Protocol: ${detectedModel.smartIrId}"
+
+                    state.wizardState.detectedModel = detectedModel
+                    state.wizardState.usedManufacturerSelection = true
+                    state.wizardState.readyForNextPage = true
+                    state.wizardState.manufacturerStatus = "Success! Commands generated for ${settings.selectedManufacturer}"
+                } else {
+                    log.error "Failed to generate commands"
+                    state.wizardState.detectedModel = null
+                    state.wizardState.readyForNextPage = false
+                    state.wizardState.manufacturerStatus = "Failed to generate commands for ${settings.selectedManufacturer}"
+                }
+            } catch (Exception e) {
+                log.error "Error generating commands: ${e.message}"
+                state.wizardState.manufacturerStatus = "Error: ${e.message}"
+            }
+            break
+
         case "triggerLearn":
             log.info "=== Starting IR Code Learning ==="
             if (irDevice) {
@@ -802,6 +994,7 @@ def appButtonHandler(btn) {
                 state.wizardState.learnedCode = settings.manualCode
                 state.wizardState.learningInProgress = false
                 state.wizardState.learningStatus = "Testing manual code..."
+                state.wizardState.manualCodeResult = "Identifying protocol..."
 
                 // Try to match it
                 def detectedModel = matchCodeToModel(settings.manualCode)
@@ -810,16 +1003,20 @@ def appButtonHandler(btn) {
                     state.wizardState.matchError = null
                     state.wizardState.readyForNextPage = true
                     state.wizardState.learningStatus = "Manual code matched successfully!"
+                    state.wizardState.manualCodeResult = "✅ <b style='color: green;'>Protocol Identified: ${detectedModel.smartIrId}</b><br>Click 'Next' to verify and complete setup."
                     log.info "✓ Manual code matched to ${detectedModel.smartIrId}"
                 } else {
                     state.wizardState.detectedModel = null
                     state.wizardState.matchError = "Could not identify protocol"
                     state.wizardState.readyForNextPage = false
                     state.wizardState.learningStatus = "Manual code could not be matched"
+                    state.wizardState.manualCodeResult = "⚠️ <b style='color: orange;'>Could not identify protocol</b><br>Try a different code or select a manufacturer above."
                     log.warn "Manual code did not match any protocol"
                 }
             } else {
                 log.warn "No manual code provided"
+                if (!state.wizardState) state.wizardState = [:]
+                state.wizardState.manualCodeResult = "⚠️ Please enter an IR code first"
             }
             break
 
