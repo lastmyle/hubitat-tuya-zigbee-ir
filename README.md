@@ -1,86 +1,94 @@
-# hubitat-tuya-zigbee-ir
-Hubitat Driver for Tuya Zigbee IR Remote Controls
+# Maestro Tuya Zigbee IR Remote Control
 
-## Development Setup
+A Hubitat driver and companion setup wizard for Tuya Zigbee IR blasters (Model ZS06/TS1201). Turns a cheap Zigbee IR blaster into a full HVAC controller with automatic protocol detection, or a general-purpose IR remote for TVs, fans, and other IR-controlled devices.
+
+## What It Does
+
+- **HVAC Control**: Automatic protocol detection via the [Maestro API](https://github.com/lastmyle/maestro-tuya-ir) identifies your air conditioner's IR protocol and generates a complete command set (mode, temperature, fan speed). After one-time setup, all commands run locally with zero cloud dependency.
+- **General IR Remote**: Learn any IR code from a physical remote and replay it via Hubitat automations. Map learned codes to virtual buttons for Rule Machine integration.
+- **Zigbee Protocol**: Implements the full Tuya IR learning and sending protocol over Zigbee clusters 0xE004 and 0xED00, including chunked data transfer with CRC validation.
+
+## Components
+
+| File | Type | Purpose |
+|------|------|---------|
+| `driver.groovy` | Hubitat Device Driver | Zigbee communication, IR learn/send, HVAC command execution |
+| `app.groovy` | Hubitat App | HVAC setup wizard with manufacturer selection and protocol detection |
+
+## Quick Start
+
+### HVAC Setup (Recommended)
+
+1. Install both `driver.groovy` (as a Driver) and `app.groovy` (as an App) on your Hubitat hub
+2. Pair your Tuya IR blaster via Zigbee - the driver auto-assigns via fingerprint matching
+3. Open the **Maestro HVAC Setup Wizard** app
+4. Select your IR blaster device
+5. Pick your HVAC manufacturer from the dropdown, or learn an IR code from your physical remote
+6. The wizard detects the protocol and generates all commands automatically
+7. Confirm and save - your HVAC is now controllable from Hubitat
+
+### General IR Remote
+
+1. Install `driver.groovy` on your Hubitat hub
+2. Pair your Tuya IR blaster
+3. Use the **Learn** command with a code name (e.g. `PowerToggle`)
+4. Point your physical remote at the IR blaster and press the button
+5. Use **Map Button** to assign the learned code to a button number
+6. Trigger via Rule Machine: "Push Button 1 on {Device}"
+
+### Example: TV Power Toggle
+
+1. Learn command: name it `PowerToggle`
+2. Map Button: button `1` to `PowerToggle`
+3. Create a Virtual Switch "Bedroom TV"
+4. Rule Machine: when "Bedroom TV changed" → Push Button 1 on Tuya IR Blaster
+5. Expose the virtual switch to Google Home / Alexa
+
+![Rule Machine example](https://github.com/user-attachments/assets/42d39ca8-9441-4b54-8e9a-0f5f728d5610)
+
+## Development
 
 ### Prerequisites
-- macOS, Linux, or WSL on Windows
-- Bash or Zsh shell
 
-### Quick Start
+- macOS, Linux, or WSL
+- Docker (for tests) or Groovy 2.4.19 via SDKMAN
 
-```bash
-# 1. Install Groovy 2.4.19 via SDKMAN
-make setup
-
-# 2. Activate SDKMAN in your current shell (first time only)
-source ~/.sdkman/bin/sdkman-init.sh
-
-# 3. Run tests
-make test
-
-# 4. Deploy to hub
-make deploy
-```
-
-**Note:** This project includes a `.sdkmanrc` file that automatically uses Groovy 2.4.19 (matching Hubitat's exact version) when you enter the project directory. After initial setup, SDKMAN will auto-switch versions for you.
-
-### Available Commands
+### Commands
 
 ```bash
-make setup     # Install development dependencies
-make test      # Run all tests (76/82 passing = 92.7%)
-make validate  # Validate code syntax
-make deploy    # Deploy to Hubitat hub
+make setup     # Install Groovy 2.4.19 via SDKMAN
+make test      # Run tests in Docker (preferred)
+make validate  # Check syntax
+make deploy    # Copy driver + app to clipboard for pasting into Hubitat
 ```
 
-Note: CodeNarc linting (`make lint`) is not currently supported due to compatibility issues between Groovy 2.4.x and recent CodeNarc versions.
+Tests run automatically on push to `main` via GitHub Actions.
 
-For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+### Deployment
 
-## User Instructions
+Hubitat doesn't support API-based code uploads. Deployment copies the file to your clipboard for manual paste into the Hubitat web UI:
 
-This driver was written for my own personal use and I consider it v0.1 proof of concept.
+- **Driver**: Drivers Code > New Driver > Paste > Save
+- **App**: Apps Code > New App > Paste > Save
 
-The integration with other Hubitat features is a bit of a quick hack just to get something that worked for my use case. 
+See [DEPLOYMENT.md](DEPLOYMENT.md) for details.
 
-Long term, I have a half written application I'd like to finish to go along with this that would be used to create virtual sub devices automatically to make this easier, but I haven't finished it yet.
+## Documentation
 
-## Learning Codes
+- [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture with diagrams
+- [SECURITY.md](SECURITY.md) - Security model and threat analysis
+- [DEPLOYMENT.md](DEPLOYMENT.md) - Deployment instructions
+- [HVAC_SETUP_README.md](HVAC_SETUP_README.md) - Detailed HVAC setup guide
 
-To learn a button from your original remote:
+## Supported Devices
 
-1. On the IR device driver page, run the "Learn" command, giving it a "Code Name" for the IR code. E.x. `PowerToggle` or `VolumeUp`
-2. The blue LED on the Tuya IR device should light up
-3. Point the original remote control at the Tuya IR blaster and press the corresponding button on your original remote control
-4. The blue LED should turn off and an entry should appear in the "Learned Codes" state section
+**IR Blasters:**
+- Tuya ZS06 / TS1201 (manufacturer `_TZ3290_7v1k4vufotpowp9z`)
+- Tuya TS1201 variant (manufacturer `_TZ3290_4axevryg`)
 
-## Testing Codes
+**HVAC Protocols** (via Maestro API):
+Panasonic, Daikin, Fujitsu, Mitsubishi, LG, Gree, Hitachi, Samsung, and others supported by IRremoteESP8266.
 
-After learning a code you can test by pointing the Tuya IR blaster at your device and running the "Send Code" command, giving it the same Code Name you provided to the "Learn" command. 
+## License
 
-The Tuya LED light should blink and the command should be sent. 
-
-If it doesn't work, I'd try learning the code again.
-
-## Integration with Rule Machine or other apps
-
-This is a bit if a hack like mentioned above.
-
-There's no Hubitat device type that lets you send arbitrary strings like `PowerToggle` or `VolumeUp` (or the base64 encoded binary data that is the actual IR code), so the driver exposes the same interface as a Button and let's you map arbitrary button numbers to IR commands. 
-
-1. Run the "Map Button" command, picking an arbitrary unique "Button" number (e.x `1`) and giving it the same "Code Name" you learned earlier
-
-Now in Rule Machine (or any other app that can perform actions) you can add the action "Push Button 1 on {Tuya Device Name}" whenever you want the IR blaster to send the code. You can make a Virtual device to represent whatever it is you are controlling and then make a Rule Machine rule to push the corresponding "button" number on the Tuya device whenever the virtual button is pressed.
-
-## Example
-
-To turn on/off my bedroom TV, for example, I:
-
-1. Used the Learn command to learn the IR command emit when I pressed the power on/off button on my original remote, giving it the name `PowerToggle`
-2. Used the "Map Button" command to map button 1 to the `PowerToggle` command
-3. Created a Virtual Switch device called "Bedroom TV" and then made a Rule Machine rule with the condition "Bedroom TV *changed*" and action "Push Button 1 on Tuya IR Blaster".
-
-![Screenshot showing the Rule Machine rule described above](https://github.com/user-attachments/assets/42d39ca8-9441-4b54-8e9a-0f5f728d5610)
-
-Now toggling the Bedroom TV switch (which I expose in Google Home to control from my phone) turns on/off the TV.
+MIT
