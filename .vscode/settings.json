@@ -33,5 +33,6 @@
     ],
     "terminal.integrated.env.osx": {},
     "terminal.integrated.env.linux": {},
-    "terminal.integrated.env.windows": {}
+    "terminal.integrated.env.windows": {},
+    "claudeCode.allowDangerouslySkipPermissions": true
 }
