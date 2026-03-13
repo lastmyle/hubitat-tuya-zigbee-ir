@@ -64,3 +64,22 @@ Since Hubitat lacks native IR code support, the driver uses a button mapping wor
 - Zigbee cluster 0xED00 handles IR transmission protocol
 - Zigbee cluster 0xE004 handles learn mode control
 - Requires Groovy 2.4.x compatibility for Hubitat platform
+
+## Git Conventions
+
+### Pull Request Conventions
+
+- Always use `--repo lastmyle/hubitat-tuya-zigbee-ir` with `gh` commands (SSH alias `github.com-lastmyle`)
+- **Feature PRs**: automerge with `--squash` into the integration branch
+- **Release PRs**: automerge with `--merge` (no squash) to preserve commit history
+- PR bots: Copilot (review comments), Claude bot (code review), CodeRabbit (summary)
+
+### PR Review Bot Handling
+
+**MANDATORY**: After creating a PR, monitor it for review comments from CodeRabbit, Claude bot, and Copilot. Handle them automatically:
+
+1. **Fetch review comments**: `gh api repos/lastmyle/hubitat-tuya-zigbee-ir/pulls/<number>/comments` and review threads via GraphQL
+2. **Address actionable feedback**: If a bot flags a real issue (bug, security, missing test), fix it with a follow-up commit
+3. **Resolve conversations**: After addressing or determining a comment is not actionable, resolve the thread via GraphQL `resolveReviewThread` mutation
+4. **Codecov failures**: If Codecov reports coverage drops or missing tests, write the missing tests and push a follow-up commit
+5. **Do not leave unresolved threads** — all conversations must be resolved for merge to proceed
