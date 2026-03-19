@@ -281,6 +281,11 @@ def addHvacCommands(final String commandsJsonStr) {
     addHvacCommands(parsed as List)
 }
 
+// Maker API passes two String args (value + secondary value). Accept and ignore the second.
+def addHvacCommands(final String commandsJsonStr, final String secondaryValue) {
+    addHvacCommands(commandsJsonStr)
+}
+
 /**
  * Append a batch of HVAC IR commands (List overload)
  * Hubitat's Maker API deserializes JSON arrays and passes them as a List.
