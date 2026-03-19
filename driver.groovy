@@ -78,6 +78,9 @@ metadata {
         command 'setHvacConfig', [
             [name: 'Config JSON*', type: 'JSON_OBJECT', description: 'DO NOT SET MANUALLY - Used by HVAC Setup Wizard to configure HVAC control. Stores ALL IR codes (~200+ commands) locally for instant operation without network access.']
         ]
+        command 'addHvacCommands', [
+            [name: 'Commands JSON*', type: 'STRING', description: 'DO NOT SET MANUALLY - Used by maestro-installer to append a batch of HVAC IR commands. JSON array of {name, tuya_code} objects.']
+        ]
 
         // HVAC Control Commands (for automations and manual control)
         command 'hvacTurnOff'
@@ -196,15 +199,15 @@ def sendCode(final String codeNameOrBase64CodeInput) {
  */
 
 /**
- * Set HVAC configuration from the setup wizard app
- * Called by: HVAC Setup Wizard app (ONE-TIME during setup)
+ * Set HVAC configuration from the setup wizard app (Map overload)
+ * Called by: HVAC Setup Wizard app in-process (ONE-TIME during setup)
  *
- * IMPORTANT: This stores ALL IR codes locally in driver state for instant runtime access.
+ * Stores ALL IR codes locally in driver state for instant runtime access.
  * After this one-time setup, the driver requires NO network access for HVAC control.
  *
  * @param configJson Map containing:
  *   - model: String (e.g., "CS/CU-xxxx Series")
- *   - commands: Array of ALL IR codes (including off) (local storage ~50KB)
+ *   - commands: Array of ALL IR codes (including off)
  */
 def setHvacConfig(final Map configJson) {
     info "setHvacConfig(${configJson?.model})"
@@ -214,19 +217,83 @@ def setHvacConfig(final Map configJson) {
         return
     }
 
-    // Store FULL configuration locally in driver state
-    // This enables sub-second runtime commands with NO network dependency
-    state.hvacConfig = [
-        model: configJson.model,
-        commands: configJson.commands ?: [],        // ← All 200+ commands stored locally (including off)
-        currentState: [mode: 'off', temp: null, fan: null]
-    ]
+    state.hvacModel = configJson.model
+    state.hvacBrand = configJson.brand
+    state.hvacCommands = configJson.commands ?: []
+    state.hvacConfigured = true
+    if (!state.hvacCurrentState) {
+        state.hvacCurrentState = [mode: 'off', temp: null, fan: null]
+    }
 
-    // Update readonly attributes for display
     doSendEvent(name: 'hvacModel', value: configJson.model ?: 'Unknown')
-    doSendEvent(name: 'hvacConfigured', value: 'Yes')
+    doSendEvent(name: 'hvacConfigured', value: 'true')
 
     info 'HVAC configuration saved successfully'
+}
+
+/**
+ * Set HVAC configuration (String overload for Maker API)
+ * Called by: maestro-installer via Maker API
+ *
+ * When called with metadata only (no commands), initialises a fresh config
+ * and awaits commands via addHvacCommands(). When called with commands
+ * included, behaves identically to the Map overload.
+ *
+ * @param configJsonStr JSON string with model/brand fields and optional commands array
+ */
+def setHvacConfig(final String configJsonStr) {
+    def parsed = new groovy.json.JsonSlurper().parseText(configJsonStr)
+    // If commands are included, delegate to the Map overload for full setup
+    if (parsed.commands) {
+        setHvacConfig(parsed as Map)
+        return
+    }
+
+    info "setHvacConfig(model=${parsed?.model}, metadata only)"
+
+    if (!parsed?.model) {
+        error 'Invalid config: missing model field'
+        return
+    }
+
+    state.hvacModel = parsed.model
+    state.hvacBrand = parsed.brand
+    state.hvacCommands = []
+    state.hvacConfigured = false
+    if (!state.hvacCurrentState) {
+        state.hvacCurrentState = [mode: 'off', temp: null, fan: null]
+    }
+
+    doSendEvent(name: 'hvacModel', value: parsed.model)
+    doSendEvent(name: 'hvacConfigured', value: 'false')
+
+    info 'HVAC metadata saved, awaiting commands via addHvacCommands()'
+}
+
+/**
+ * Append a batch of HVAC IR commands
+ * Called by: maestro-installer via Maker API in batches of ~8
+ *
+ * @param commandsJsonStr JSON array of {name, tuya_code} objects
+ */
+def addHvacCommands(final String commandsJsonStr) {
+    def parsed = new groovy.json.JsonSlurper().parseText(commandsJsonStr)
+    info "addHvacCommands(${parsed?.size()} commands)"
+
+    if (!(parsed instanceof List)) {
+        error 'Invalid commands: expected JSON array'
+        return
+    }
+
+    if (!state.hvacCommands) {
+        state.hvacCommands = []
+    }
+    state.hvacCommands.addAll(parsed)
+    state.hvacConfigured = true
+
+    doSendEvent(name: 'hvacConfigured', value: 'true')
+
+    info "Appended ${parsed.size()} commands (total: ${state.hvacCommands.size()})"
 }
 
 
@@ -236,7 +303,12 @@ def setHvacConfig(final Map configJson) {
  * @return Map of current configuration
  */
 Map getHvacConfig() {
-    return state.hvacConfig
+    return [
+        model: state.hvacModel,
+        brand: state.hvacBrand,
+        commands: state.hvacCommands ?: [],
+        currentState: state.hvacCurrentState ?: [mode: 'off', temp: null, fan: null]
+    ]
 }
 
 
@@ -251,19 +323,17 @@ Map getHvacConfig() {
 def hvacTurnOff() {
     info 'hvacTurnOff()'
 
-    if (!state.hvacConfig) {
+    if (!state.hvacConfigured) {
         error 'HVAC not configured - run HVAC Setup Wizard first'
         return
     }
 
-    // Commands are stored as array: [{name: "power_off", tuya_code: "..."}, ...]
-    def commands = state.hvacConfig.commands
+    def commands = state.hvacCommands
     if (!commands || !(commands instanceof List)) {
         error 'No commands configured or invalid format'
         return
     }
 
-    // Find power_off command
     def offCmd = commands.find { it.name?.toLowerCase() == 'power_off' }
     if (!offCmd || !offCmd.tuya_code) {
         error 'No OFF command found in configuration'
@@ -273,8 +343,7 @@ def hvacTurnOff() {
     info 'Sending HVAC OFF command'
     sendCode(offCmd.tuya_code)
 
-    // Update current state
-    state.hvacConfig.currentState = [mode: 'off', temp: null, fan: null]
+    state.hvacCurrentState = [mode: 'off', temp: null, fan: null]
 
     // Emit events for MQTT -> InfluxDB tracking
     doSendEvent(name: 'hvacMode', value: 'off')
@@ -290,19 +359,17 @@ def hvacTurnOff() {
 def hvacSendCommandName(String commandName) {
     info "hvacSendCommandName(${commandName})"
 
-    if (!state.hvacConfig) {
+    if (!state.hvacConfigured) {
         error 'HVAC not configured - run HVAC Setup Wizard first'
         return
     }
 
-    // Commands are stored as array: [{name: "24_cool_auto", tuya_code: "..."}, ...]
-    def commands = state.hvacConfig.commands
+    def commands = state.hvacCommands
     if (!commands || !(commands instanceof List)) {
         error 'No commands configured or invalid format'
         return
     }
 
-    // Find the command by name
     def cmd = commands.find { it.name?.toLowerCase() == commandName.toLowerCase() }
 
     if (!cmd || !cmd.tuya_code) {
@@ -310,18 +377,15 @@ def hvacSendCommandName(String commandName) {
         return
     }
 
-    // Send the command
     info "Sending HVAC command: ${cmd.name}"
     sendCode(cmd.tuya_code)
 
-    // Parse command name to update state (e.g., "24_cool_auto" -> temp=24, mode=cool, fan=auto)
     def parts = commandName.split('_')
     if (parts.size() == 3 && parts[0].isNumber()) {
-        // Regular command: "24_cool_auto"
         Integer temp = parts[0].toInteger()
         String mode = parts[1]
         String fan = parts[2]
-        state.hvacConfig.currentState = [mode: mode, temp: temp, fan: fan]
+        state.hvacCurrentState = [mode: mode, temp: temp, fan: fan]
 
         // Emit events for MQTT -> InfluxDB tracking
         doSendEvent(name: 'hvacMode', value: mode)
@@ -333,7 +397,7 @@ def hvacSendCommandName(String commandName) {
     } else {
         // Special command: "power_on", "power_off", etc.
         if (commandName.toLowerCase() in ['power_off', 'off']) {
-            state.hvacConfig.currentState = [mode: 'off', temp: null, fan: null]
+            state.hvacCurrentState = [mode: 'off', temp: null, fan: null]
 
             // Emit off state events
             doSendEvent(name: 'hvacMode', value: 'off')
@@ -377,12 +441,12 @@ def hvacSendCommand(String mode, String temp, String fan) {
 def hvacRestoreState() {
     info 'hvacRestoreState()'
 
-    if (!state.hvacConfig) {
+    if (!state.hvacConfigured) {
         error 'HVAC not configured - run HVAC Setup Wizard first'
         return
     }
 
-    def currentState = state.hvacConfig.currentState
+    def currentState = state.hvacCurrentState
     if (!currentState || currentState.mode == 'off') {
         info 'Last state was OFF or unknown - nothing to restore'
         return
