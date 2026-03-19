@@ -79,7 +79,7 @@ metadata {
             [name: 'Config JSON*', type: 'JSON_OBJECT', description: 'DO NOT SET MANUALLY - Used by HVAC Setup Wizard to configure HVAC control. Stores ALL IR codes (~200+ commands) locally for instant operation without network access.']
         ]
         command 'addHvacCommands', [
-            [name: 'Commands JSON*', type: 'STRING', description: 'DO NOT SET MANUALLY - Used by maestro-installer to append a batch of HVAC IR commands. JSON array of {name, tuya_code} objects.']
+            [name: 'Commands JSON*', type: 'JSON_OBJECT', description: 'DO NOT SET MANUALLY - Used by maestro-installer to append a batch of HVAC IR commands. JSON array of {name, tuya_code} objects.']
         ]
 
         // HVAC Control Commands (for automations and manual control)
@@ -271,29 +271,39 @@ def setHvacConfig(final String configJsonStr) {
 }
 
 /**
- * Append a batch of HVAC IR commands
+ * Append a batch of HVAC IR commands (String overload)
  * Called by: maestro-installer via Maker API in batches of ~8
  *
  * @param commandsJsonStr JSON array of {name, tuya_code} objects
  */
 def addHvacCommands(final String commandsJsonStr) {
     def parsed = new groovy.json.JsonSlurper().parseText(commandsJsonStr)
-    info "addHvacCommands(${parsed?.size()} commands)"
+    addHvacCommands(parsed as List)
+}
 
-    if (!(parsed instanceof List)) {
-        error 'Invalid commands: expected JSON array'
+/**
+ * Append a batch of HVAC IR commands (List overload)
+ * Hubitat's Maker API deserializes JSON arrays and passes them as a List.
+ *
+ * @param commands List of Maps with name and tuya_code keys
+ */
+def addHvacCommands(final List commands) {
+    info "addHvacCommands(${commands?.size()} commands)"
+
+    if (!commands) {
+        error 'Invalid commands: empty or null'
         return
     }
 
     if (!state.hvacCommands) {
         state.hvacCommands = []
     }
-    state.hvacCommands.addAll(parsed)
+    state.hvacCommands.addAll(commands)
     state.hvacConfigured = true
 
     doSendEvent(name: 'hvacConfigured', value: 'true')
 
-    info "Appended ${parsed.size()} commands (total: ${state.hvacCommands.size()})"
+    info "Appended ${commands.size()} commands (total: ${state.hvacCommands.size()})"
 }
 
 
