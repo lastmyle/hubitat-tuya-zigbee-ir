@@ -81,6 +81,9 @@ metadata {
         command 'addHvacCommands', [
             [name: 'Commands JSON*', type: 'JSON_OBJECT', description: 'DO NOT SET MANUALLY - Used by maestro-installer to append a batch of HVAC IR commands. JSON array of {name, tuya_code} objects.']
         ]
+        command 'addHvacCommandsBase64', [
+            [name: 'Base64 Commands*', type: 'STRING', description: 'DO NOT SET MANUALLY - Used by maestro-installer. Base64-encoded JSON array of {name, tuya_code} objects.']
+        ]
 
         // HVAC Control Commands (for automations and manual control)
         command 'hvacTurnOff'
@@ -271,19 +274,18 @@ def setHvacConfig(final String configJsonStr) {
 }
 
 /**
- * Append a batch of HVAC IR commands (String overload)
+ * Append a batch of HVAC IR commands from a base64-encoded JSON string
  * Called by: maestro-installer via Maker API in batches of ~8
+ * Base64 encoding avoids Hubitat Maker API URL encoding/parsing issues.
  *
- * @param commandsJsonStr JSON array of {name, tuya_code} objects
+ * @param base64Str Base64-encoded JSON array of {name, tuya_code} objects
  */
-def addHvacCommands(final String commandsJsonStr) {
-    def parsed = new groovy.json.JsonSlurper().parseText(commandsJsonStr)
+def addHvacCommandsBase64(final String base64Str) {
+    info "addHvacCommandsBase64() called (${base64Str?.length()} chars)"
+    def json = new String(base64Str.decodeBase64())
+    info "addHvacCommandsBase64 decoded JSON (${json.length()} chars)"
+    def parsed = new groovy.json.JsonSlurper().parseText(json)
     addHvacCommands(parsed as List)
-}
-
-// Maker API passes two String args (value + secondary value). Accept and ignore the second.
-def addHvacCommands(final String commandsJsonStr, final String secondaryValue) {
-    addHvacCommands(commandsJsonStr)
 }
 
 /**
