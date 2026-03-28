@@ -206,10 +206,30 @@ def selectManufacturer() {
                 paragraph "<b>Status:</b> ${state.wizardState.manufacturerStatus}"
             }
 
-            // If manufacturer selected, show generate button
+            // If manufacturer selected, show variant selection or generate button
             if (settings.selectedManufacturer && !state.wizardState?.detectedModel) {
-                paragraph ""
-                input "generateFromManufacturer", "button", title: "Generate Commands for ${settings.selectedManufacturer}"
+                def variants = state.wizardState?.manufacturerData?.get(settings.selectedManufacturer) ?: []
+
+                if (variants.size() > 1) {
+                    // Multiple variants — ask user to pick one
+                    paragraph ""
+                    paragraph "<b>This manufacturer has multiple protocol variants.</b>"
+                    paragraph "Select which protocol to use:"
+                    input "selectedVariant", "enum",
+                          options: variants,
+                          title: "Protocol Variant",
+                          required: false,
+                          submitOnChange: true
+
+                    if (settings.selectedVariant) {
+                        paragraph ""
+                        input "generateFromManufacturer", "button", title: "Generate Commands for ${settings.selectedManufacturer} (${settings.selectedVariant})"
+                    }
+                } else {
+                    // Single or no variant — go straight to generate
+                    paragraph ""
+                    input "generateFromManufacturer", "button", title: "Generate Commands for ${settings.selectedManufacturer}"
+                }
             }
 
             // Show success if model detected
@@ -458,11 +478,11 @@ def complete() {
  * Stores result in state.wizardState.manufacturers
  */
 def fetchManufacturers() {
-    log.info "Fetching manufacturers from Maestro API..."
+    log.info "Fetching manufacturers from Maestro API v2..."
 
     try {
         def params = [
-            uri: MAESTRO_API_URL + "/api/manufacturers",
+            uri: MAESTRO_API_URL + "/api/v2/manufacturers",
             headers: [
                 "User-Agent": "Hubitat-HVAC-Wizard/1.0"
             ],
@@ -471,13 +491,16 @@ def fetchManufacturers() {
 
         httpGet(params) { resp ->
             if (resp.status == 200) {
-                def manufacturers = resp.data?.manufacturers ?: []
-                log.info "✓ Retrieved ${manufacturers.size()} manufacturers"
+                def manufacturerData = resp.data?.manufacturers ?: []
+                log.info "✓ Retrieved ${manufacturerData.size()} manufacturers"
 
                 if (!state.wizardState) state.wizardState = [:]
-                state.wizardState.manufacturers = manufacturers
+                // Store full manufacturer data (name + variants) for variant selection
+                state.wizardState.manufacturerData = manufacturerData.collectEntries { [(it.name): it.variants ?: []] }
+                // Store flat name list for the enum dropdown
+                state.wizardState.manufacturers = manufacturerData.collect { it.name }
 
-                return manufacturers
+                return state.wizardState.manufacturers
             } else {
                 log.error "API returned status ${resp.status}"
                 return []
@@ -487,6 +510,7 @@ def fetchManufacturers() {
         log.error "Failed to fetch manufacturers: ${e.message}"
         if (!state.wizardState) state.wizardState = [:]
         state.wizardState.manufacturers = ["Error loading manufacturers"]
+        state.wizardState.manufacturerData = [:]
         return []
     }
 }
@@ -495,8 +519,8 @@ def fetchManufacturers() {
  * Generate commands for a manufacturer using known good codes.
  * Calls /api/generate-from-manufacturer endpoint.
  */
-def generateFromManufacturer(String manufacturer) {
-    log.info "Generating commands for manufacturer: ${manufacturer}"
+def generateFromManufacturer(String manufacturer, String variant = null) {
+    log.info "Generating commands for manufacturer: ${manufacturer}" + (variant ? " variant: ${variant}" : "")
 
     if (!manufacturer) {
         log.error "No manufacturer specified"
@@ -507,12 +531,15 @@ def generateFromManufacturer(String manufacturer) {
         def requestBody = [
             manufacturer: manufacturer
         ]
+        if (variant) {
+            requestBody.variant = variant
+        }
 
         def jsonBody = groovy.json.JsonOutput.toJson(requestBody)
         log.debug "Request body: ${jsonBody}"
 
         def params = [
-            uri: MAESTRO_API_URL + "/api/generate-from-manufacturer",
+            uri: MAESTRO_API_URL + "/api/v2/generate-from-manufacturer",
             headers: [
                 "Content-Type": "application/json",
                 "User-Agent": "Hubitat-HVAC-Wizard/1.0"
@@ -905,9 +932,11 @@ def appButtonHandler(btn) {
 
             try {
                 if (!state.wizardState) state.wizardState = [:]
-                state.wizardState.manufacturerStatus = "Generating commands for ${settings.selectedManufacturer}..."
+                def variants = state.wizardState?.manufacturerData?.get(settings.selectedManufacturer) ?: []
+                def variant = (variants.size() > 1) ? settings.selectedVariant : null
+                state.wizardState.manufacturerStatus = "Generating commands for ${settings.selectedManufacturer}${variant ? ' (' + variant + ')' : ''}..."
 
-                def detectedModel = generateFromManufacturer(settings.selectedManufacturer)
+                def detectedModel = generateFromManufacturer(settings.selectedManufacturer, variant)
 
                 if (detectedModel) {
                     log.info "✅ Commands generated successfully!"
