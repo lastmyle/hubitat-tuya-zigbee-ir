@@ -14,7 +14,7 @@ import groovy.transform.Field
 
 definition(
     name: "Maestro HVAC Setup Wizard",
-    namespace: "hubitat.lastmyle.maestr",
+    namespace: "hubitat.lastmyle.maestro",
     author: "Lastmyle",
     description: "Configure HVAC IR remotes with automatic model detection",
     category: "Convenience",
