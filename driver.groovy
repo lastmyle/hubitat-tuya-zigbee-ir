@@ -903,9 +903,10 @@ def handleDoneReceiving(final Map message) {
     final String code = encodeBase64(seqData.buffer.toArray() as byte[])
     info "learned code: ${code}"
 
-    doSendEvent(name: 'lastLearnedCode', value: code, descriptionText: "${device} lastLearnedCode is ${code}".toString())
+    doSendEvent(name: 'lastLearnedCode', value: code)
 
-    final String optionalCodeName = pendingLearnCodeNames().pop()
+    final List<String> queue = pendingLearnCodeNames()
+    final String optionalCodeName = queue.empty ? null : queue.pop()
     if (optionalCodeName != null) {
         final Map learnedCodes = state.computeIfAbsent('learnedCodes', { k -> new HashMap() })
         learnedCodes[optionalCodeName] = code
