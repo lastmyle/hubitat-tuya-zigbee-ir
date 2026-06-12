@@ -73,7 +73,7 @@ class EndToEndTests {
             zero: 0,
         ])
         
-        assertEquals([ driver.invokeMethod("newLearnMessage", [ false ]) ], driver.sentCommands)
+        assertEquals([ driver.invokeMethod("newLearnMessage", [ true ]) ], driver.sentCommands)
 
         // Check that the expected events were sent
         assertEquals([

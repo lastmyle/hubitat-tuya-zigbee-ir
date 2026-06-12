@@ -1,13 +1,14 @@
 import org.junit.Test
 
 /**
- * Debug test to understand facade behavior
+ * Debug scratch tests against the v2 wizard snapshot (app.v2.groovy).
+ * v3 has no equivalent isCacheValid/matchCodeToModel surface.
  */
 class DebugAppTest {
 
     @Test
     void testSimpleMethodCall() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Test that we can call isCacheValid
         def result1 = app.isCacheValid()
@@ -25,7 +26,7 @@ class DebugAppTest {
 
     @Test
     void testMatchCodeToModelSimple() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         println "Initial state: ${app.state}"
 

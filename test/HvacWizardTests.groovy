@@ -1,13 +1,17 @@
 import org.junit.Test
 
 /**
- * Tests for HVAC Setup Wizard App functionality with local protocol detection
+ * Tests for v2 HVAC Setup Wizard App (app.v2.groovy)
+ *
+ * v2 identified the protocol by sending the learned IR code to the live
+ * Maestro /api/identify endpoint. v3 replaces this flow with a
+ * brand/model picker — see HvacV3WizardTests for the current wizard.
  */
 class HvacWizardTests {
 
     @Test
     void testAppInitialization() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Verify app loaded
         assert app != null
@@ -17,7 +21,7 @@ class HvacWizardTests {
 
     @Test
     void testCodeMatchingFujitsu() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Test matching Fujitsu OFF code
         def result = app.matchCodeToModel(TestCodes.FUJITSU_OFF)
@@ -31,7 +35,7 @@ class HvacWizardTests {
 
     @Test
     void testCodeMatchingFujitsuCool() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Test matching Fujitsu cool command
         def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO)
@@ -44,7 +48,7 @@ class HvacWizardTests {
 
     @Test
     void testCodeMatchingDaikin() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Test matching Daikin code
         def result = app.matchCodeToModel(TestCodes.DAIKIN_COOL_24_AUTO)
@@ -57,7 +61,7 @@ class HvacWizardTests {
 
     @Test
     void testCodeMatchingPanasonic() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Test matching Panasonic code
         def result = app.matchCodeToModel(TestCodes.PANASONIC_COOL_20_AUTO)
@@ -68,7 +72,7 @@ class HvacWizardTests {
 
     @Test
     void testCodeMatchingMitsubishi() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Test matching Mitsubishi code
         def result = app.matchCodeToModel(TestCodes.MITSUBISHI_HEAT_26_HIGH)
@@ -81,7 +85,7 @@ class HvacWizardTests {
 
     @Test
     void testCodeMatchingLG() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Test matching LG code
         def result = app.matchCodeToModel(TestCodes.LG_COOL_24_AUTO)
@@ -92,7 +96,7 @@ class HvacWizardTests {
 
     @Test
     void testCodeMatchingGree() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Test matching Gree code with different fan speeds
         def resultAuto = app.matchCodeToModel(TestCodes.GREE_COOL_AUTO_22)
@@ -114,7 +118,7 @@ class HvacWizardTests {
 
     @Test
     void testCodeMatchingNoMatch() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Test with invalid code (not a real Tuya IR code)
         def result = app.matchCodeToModel("INVALID_CODE_XYZ")
@@ -124,7 +128,7 @@ class HvacWizardTests {
 
     @Test
     void testCodeMatchingEmptyCode() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Test with empty code
         def result = app.matchCodeToModel("")
@@ -141,7 +145,7 @@ class HvacWizardTests {
 
     @Test
     void testCodeMatchingWithWhitespace() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Get a real code
         String cleanCode = TestCodes.FUJITSU_COOL_24_AUTO
@@ -161,7 +165,7 @@ class HvacWizardTests {
 
     @Test
     void testCodeMatchingManufacturerMismatch() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Test protocol detection (no manufacturer hint needed)
         def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO)
@@ -172,7 +176,7 @@ class HvacWizardTests {
 
     @Test
     void testCodeMatchingTemperatureBoundaries() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Test minimum temperature
         def resultMin = app.matchCodeToModel(TestCodes.FUJITSU_COOL_16_AUTO)
@@ -187,7 +191,7 @@ class HvacWizardTests {
 
     @Test
     void testGeneratedCommandStructure() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO)
 
@@ -209,7 +213,7 @@ class HvacWizardTests {
 
     @Test
     void testProtocolCapabilities() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO)
 
@@ -230,7 +234,7 @@ class HvacWizardTests {
 
     @Test
     void testProtocolConfidenceScore() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         def result = app.matchCodeToModel(TestCodes.FUJITSU_COOL_24_AUTO)
 
@@ -243,7 +247,7 @@ class HvacWizardTests {
 
     @Test
     void testCacheValidation() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // No cache - should be invalid
         assert !app.isCacheValid()
@@ -263,7 +267,7 @@ class HvacWizardTests {
 
     @Test
     void testCacheExpiryEdgeCase() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Exactly 24 hours ago (should be invalid, >= comparison)
         app.state.smartirCache = [
@@ -280,7 +284,7 @@ class HvacWizardTests {
 
     @Test
     void testSaveConfigToDeviceSuccess() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Setup mock device
         def mockDevice = new MockIrDevice()
@@ -304,7 +308,7 @@ class HvacWizardTests {
 
     @Test
     void testSaveConfigToDeviceNoModel() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         app.state.wizardState = [:]  // No detected model
 
@@ -315,7 +319,7 @@ class HvacWizardTests {
 
     @Test
     void testDeviceHasHvacSupport() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Device with HVAC support
         def supportedDevice = new MockIrDevice()

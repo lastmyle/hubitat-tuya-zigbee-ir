@@ -85,6 +85,8 @@ metadata {
             [name: 'Base64 Commands*', type: 'STRING', description: 'DO NOT SET MANUALLY - Used by maestro-installer. Base64-encoded JSON array of {name, tuya_code} objects.']
         ]
 
+        command 'clearHvacConfig'
+
         // HVAC Control Commands (for automations and manual control)
         command 'hvacTurnOff'
         command 'hvacSendCommand', [
@@ -95,12 +97,24 @@ metadata {
         command 'hvacSendCommandName', [
             [name: 'Command Name*', type: 'STRING', description: 'Command name (e.g., "24_cool_auto", "power_on")']
         ]
+        command 'hvacSendCommandNameV3', [
+            [name: 'Command Name (v3)*', type: 'STRING', description: 'SmartIR-native v3 command name (e.g., "COOL_HIGH_22", "OFF"). Looked up verbatim against each command\'s name_v3 field — case-sensitive, no normalisation.']
+        ]
         command 'hvacRestoreState'
+        // Republish hvacModes/hvacFanModes from the stored commands. Lets the
+        // installer read a unit's supported modes without re-saving config.
+        command 'publishHvacModes'
 
         // Readonly HVAC Configuration Attributes
         attribute 'lastLearnedCode', 'STRING'
         attribute 'hvacModel', 'STRING'
+        attribute 'hvacBrand', 'STRING'
         attribute 'hvacConfigured', 'STRING'
+        // Comma-separated lists of the modes / fan speeds the configured unit
+        // actually has, derived from the stored command names. Read by the
+        // installer so it only offers codes the device supports.
+        attribute 'hvacModes', 'STRING'
+        attribute 'hvacFanModes', 'STRING'
 
         // HVAC State Attributes (for MQTT -> InfluxDB tracking)
         attribute 'hvacMode', 'ENUM', ['off', 'cool', 'heat', 'dry', 'fan', 'auto']
@@ -142,6 +156,8 @@ def pendingReceiveSeqs() { return PENDING_RECEIVE_SEQS.computeIfAbsent(device.id
 
 def installed() {
     info 'installed()'
+    armLearnMode()
+    runEvery1Minute('armLearnMode')
 }
 
 def updated() {
@@ -156,10 +172,16 @@ def updated() {
     case 'ERROR': error 'log level is ERROR'; break;
     default: error "Unexpected logLevel: ${logLevel}"
     }
+    unschedule('armLearnMode')
+    armLearnMode()
+    runEvery1Minute('armLearnMode')
 }
 
-def configure() {
-    info 'configure()'
+// Heartbeat scheduled by runEvery1Minute. Re-sends {"study":0} so the device
+// stays armed if it drops out of learn mode (reboot, unknown firmware timeout).
+// {"study":0} is idempotent.
+def armLearnMode() {
+    sendLearn(true)
 }
 
 def learn(final String optionalCodeName) {
@@ -215,21 +237,30 @@ def sendCode(final String codeNameOrBase64CodeInput) {
 def setHvacConfig(final Map configJson) {
     info "setHvacConfig(${configJson?.model})"
 
-    if (!configJson || !configJson.commands) {
+    if (!configJson) {
         error 'Invalid config: missing required fields'
+        return
+    }
+
+    // Allow empty commands list to reset/clear commands
+    if (!configJson.commands) {
+        info "setHvacConfig configJson.commands empty, calling clearHvacConfig"
+        clearHvacConfig()
         return
     }
 
     state.hvacModel = configJson.model
     state.hvacBrand = configJson.brand
-    state.hvacCommands = configJson.commands ?: []
+    state.hvacCommands = configJson.commands
     state.hvacConfigured = true
     if (!state.hvacCurrentState) {
         state.hvacCurrentState = [mode: 'off', temp: null, fan: null]
     }
 
     doSendEvent(name: 'hvacModel', value: configJson.model ?: 'Unknown')
+    doSendEvent(name: 'hvacBrand', value: configJson.brand ?: 'Unknown')
     doSendEvent(name: 'hvacConfigured', value: 'true')
+    publishHvacModes()
 
     info 'HVAC configuration saved successfully'
 }
@@ -268,6 +299,7 @@ def setHvacConfig(final String configJsonStr) {
     }
 
     doSendEvent(name: 'hvacModel', value: parsed.model)
+    doSendEvent(name: 'hvacBrand', value: parsed.brand ?: 'Unknown')
     doSendEvent(name: 'hvacConfigured', value: 'false')
 
     info 'HVAC metadata saved, awaiting commands via addHvacCommands()'
@@ -289,10 +321,18 @@ def addHvacCommandsBase64(final String base64Str) {
 }
 
 /**
- * Append a batch of HVAC IR commands (List overload)
- * Hubitat's Maker API deserializes JSON arrays and passes them as a List.
+ * Add (or replace) a batch of HVAC IR commands. Hubitat's Maker API
+ * deserializes JSON arrays and passes them as a List.
  *
- * @param commands List of Maps with name and tuya_code keys
+ * Records may carry any combination of {name, name_v3, tuya_code, mode,
+ * fan, temperature, swing, ...}. The driver stores the record verbatim
+ * so the installer can add new optional fields without a driver change.
+ *
+ * Idempotent re-provisioning: when an incoming record's `name` matches
+ * an already-stored record, the new record replaces the old one
+ * in-place. Records without a `name` are appended unchanged.
+ *
+ * @param commands List of Maps
  */
 def addHvacCommands(final List commands) {
     info "addHvacCommands(${commands?.size()} commands)"
@@ -305,12 +345,32 @@ def addHvacCommands(final List commands) {
     if (!state.hvacCommands) {
         state.hvacCommands = []
     }
-    state.hvacCommands.addAll(commands)
+
+    int added = 0
+    int replaced = 0
+    commands.each { incoming ->
+        String key = incoming?.name
+        if (key) {
+            int idx = state.hvacCommands.findIndexOf { it?.name == key }
+            if (idx >= 0) {
+                state.hvacCommands[idx] = incoming
+                replaced++
+            } else {
+                state.hvacCommands << incoming
+                added++
+            }
+        } else {
+            state.hvacCommands << incoming
+            added++
+        }
+    }
+
     state.hvacConfigured = true
 
     doSendEvent(name: 'hvacConfigured', value: 'true')
+    publishHvacModes()
 
-    info "Appended ${commands.size()} commands (total: ${state.hvacCommands.size()})"
+    info "Stored ${commands.size()} commands (${added} added, ${replaced} replaced; total: ${state.hvacCommands.size()})"
 }
 
 
@@ -326,6 +386,51 @@ Map getHvacConfig() {
         commands: state.hvacCommands ?: [],
         currentState: state.hvacCurrentState ?: [mode: 'off', temp: null, fan: null]
     ]
+}
+
+
+/**
+ * Derive the supported modes + fan speeds from the stored command names and
+ * publish them as attributes, so the installer can read what this unit has
+ * without us exposing the full command list. Command names are
+ * "{temp}_{mode}_{fan}" (e.g. "24_cool_auto"); specials like "power_off" are
+ * ignored. Invokable via the Maker API so already-configured units can be
+ * back-filled without re-saving config.
+ */
+void publishHvacModes() {
+    def modes = [] as LinkedHashSet
+    def fans = [] as LinkedHashSet
+    (state.hvacCommands ?: []).each { cmd ->
+        def parts = (cmd?.name ?: '').tokenize('_')
+        if (parts.size() == 3 && parts[0].isInteger()) {
+            modes << parts[1]
+            fans << parts[2]
+        }
+    }
+    doSendEvent(name: 'hvacModes', value: modes.join(','))
+    doSendEvent(name: 'hvacFanModes', value: fans.join(','))
+}
+
+
+/**
+ * Clear all HVAC configuration and commands
+ */
+def clearHvacConfig() {
+    info 'clearHvacConfig()'
+
+    state.remove('hvacModel')
+    state.remove('hvacBrand')
+    state.remove('hvacCommands')
+    state.remove('hvacConfigured')
+    state.remove('hvacCurrentState')
+
+    doSendEvent(name: 'hvacModel', value: '')
+    doSendEvent(name: 'hvacBrand', value: '')
+    doSendEvent(name: 'hvacConfigured', value: 'false')
+    doSendEvent(name: 'hvacModes', value: '')
+    doSendEvent(name: 'hvacFanModes', value: '')
+
+    info 'HVAC configuration cleared'
 }
 
 
@@ -425,6 +530,76 @@ def hvacSendCommandName(String commandName) {
 
         info "✓ Command sent: ${commandName}"
     }
+}
+
+/**
+ * Send HVAC command by its SmartIR-native v3 name.
+ *
+ * Looks up records by their `name_v3` field, verbatim and case-sensitive
+ * — the installer ships pre-computed strings from the v3 backend and
+ * the driver does not normalise. Records without a `name_v3` (i.e.
+ * provisioned via the v1/v2 path) are not visible to this entry point;
+ * use hvacSendCommandName for those.
+ *
+ * State (hvacMode/hvacTemperature/hvacFanSpeed) is updated from the
+ * record's structured axes (mode/fan/temperature) rather than parsed
+ * out of the name string. The hvacCommand event still carries the
+ * v1-style `name` when present so existing rules keep matching.
+ *
+ * @param commandNameV3 The v3 command name (e.g., "COOL_HIGH_22", "OFF")
+ */
+def hvacSendCommandNameV3(String commandNameV3) {
+    info "hvacSendCommandNameV3(${commandNameV3})"
+
+    if (!state.hvacConfigured) {
+        error 'HVAC not configured - run HVAC Setup Wizard first'
+        return
+    }
+
+    def commands = state.hvacCommands
+    if (!commands || !(commands instanceof List)) {
+        error 'No commands configured or invalid format'
+        return
+    }
+
+    def cmd = commands.find { it?.name_v3 == commandNameV3 }
+    if (!cmd || !cmd.tuya_code) {
+        error "Command '${commandNameV3}' not found in configuration (v3 lookup)"
+        return
+    }
+
+    info "Sending HVAC command: ${cmd.name_v3}"
+    sendCode(cmd.tuya_code)
+
+    // Update state from the record's structured axes — never parse the
+    // v3 name string. If axes are missing or malformed, skip the state
+    // update but still emit the hvacCommand event below.
+    try {
+        String mode = cmd.mode?.toString()?.toLowerCase()
+        String fan = cmd.fan?.toString()?.toLowerCase()
+        def tempRaw = cmd.temperature
+        Integer temp = (tempRaw instanceof Number) ? ((Number) tempRaw).intValue() : null
+
+        if (mode == 'off') {
+            state.hvacCurrentState = [mode: 'off', temp: null, fan: null]
+            doSendEvent(name: 'hvacMode', value: 'off')
+            doSendEvent(name: 'hvacTemperature', value: 0, unit: '°C')
+            doSendEvent(name: 'hvacFanSpeed', value: 'auto')
+        } else if (mode && temp != null && fan) {
+            state.hvacCurrentState = [mode: mode, temp: temp, fan: fan]
+            doSendEvent(name: 'hvacMode', value: mode)
+            doSendEvent(name: 'hvacTemperature', value: temp, unit: '°C')
+            doSendEvent(name: 'hvacFanSpeed', value: fan)
+        }
+    } catch (Exception e) {
+        warn "Skipped state update for ${commandNameV3}: ${e.message}"
+    }
+
+    // Prefer v1 name for the hvacCommand event so rules listening on
+    // the legacy name keep matching after the v3 switch.
+    doSendEvent(name: 'hvacCommand', value: cmd.name ?: commandNameV3)
+
+    info "✓ Command sent: ${commandNameV3}"
 }
 
 /**
@@ -912,7 +1087,8 @@ def handleDoneReceiving(final Map message) {
         learnedCodes[optionalCodeName] = code
     }
 
-    sendLearn(false)
+    // Re-arm learn mode so the device captures the next IR signal too.
+    sendLearn(true)
 }
 
 /*************

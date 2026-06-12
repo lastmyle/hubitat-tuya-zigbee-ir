@@ -5,10 +5,14 @@ import org.junit.Before
 import org.junit.BeforeClass
 
 /**
- * Tests for IR service classes (inlined in app.groovy)
+ * Tests for IR service classes that were inlined in the v2 app.
  *
- * These tests load the service classes from the inlined app file
- * rather than importing from lib.services
+ * NOTE: These classes (FastLZ, TuyaIRService, IRRemoteESP8266,
+ * HVACCodeGenerator) are not actually present in app.v2.groovy either —
+ * they were removed in an earlier refactor when local protocol detection
+ * was moved server-side. This test class is kept as a record of the
+ * service surface that used to exist. It will fail to load classes
+ * against either app.groovy (v3) or app.v2.groovy.
  */
 class ServiceTests {
 
@@ -20,7 +24,7 @@ class ServiceTests {
     @BeforeClass
     static void loadClasses() {
         // Load the app script which contains the inlined classes
-        def appScript = new File("app.groovy")
+        def appScript = new File("app.v2.groovy")
         def shell = new GroovyShell()
         def script = shell.parse(appScript)
 

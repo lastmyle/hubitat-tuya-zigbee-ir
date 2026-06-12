@@ -6,6 +6,8 @@ junit.addListener(new TextListener(System.out))
 def result = junit.run(
     MessageTests.class,
     UtilsTests.class,
-    EndToEndTests.class
+    EndToEndTests.class,
+    HvacV3WizardTests.class,
+    HvacCommandStorageTests.class
 )
 System.exit(result.wasSuccessful() ? 0 : 1)

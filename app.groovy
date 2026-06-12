@@ -1,8 +1,17 @@
 /**
- * HVAC Setup Wizard App
+ * HVAC Setup Wizard App (v3 API)
  *
- * Multi-page configuration wizard for Tuya Zigbee IR Remote Controls
- * Uses local IR protocol detection and code generation
+ * Multi-page configuration wizard for Tuya Zigbee IR Remote Controls.
+ *
+ * Uses Maestro v3 (SmartIR-backed) endpoints:
+ *   GET /api/v3/manufacturers
+ *   GET /api/v3/manufacturers/{name}/devices
+ *   GET /api/v3/devices/{id}
+ *
+ * v3 serves codes recorded from real hardware (no algorithmic generation,
+ * no protocol identification from a learned code). The user picks brand
+ * and model. The learn step is kept only to verify the IR blaster is wired
+ * and pointing at the unit.
  */
 
 
@@ -16,7 +25,7 @@ definition(
     name: "Maestro HVAC Setup Wizard",
     namespace: "hubitat.lastmyle.maestro",
     author: "Lastmyle",
-    description: "Configure HVAC IR remotes with automatic model detection",
+    description: "Configure HVAC IR remotes from the SmartIR code library",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: ""
@@ -26,6 +35,7 @@ preferences {
     page(name: "mainPage")
     page(name: "selectDevice")
     page(name: "selectManufacturer")
+    page(name: "selectModel")
     page(name: "learnCode")
     page(name: "verifyModel")
     page(name: "complete")
@@ -35,7 +45,6 @@ preferences {
  * CONSTANTS
  */
 
-// Maestro API endpoint
 @Field static final String MAESTRO_API_URL = "https://maestro-tuya-ir.vercel.app"
 
 /*********
@@ -43,21 +52,17 @@ preferences {
  */
 
 def mainPage() {
-    // Check if already configured
     def isConfigured = irDevice && state.wizardState?.detectedModel
 
     if (isConfigured) {
-        // Show status page for configured app
         dynamicPage(name: "mainPage", title: "Maestro HVAC Configuration", uninstall: true, install: true) {
             section("Current Configuration") {
                 paragraph "<b>Device:</b> ${irDevice.displayName}"
                 def model = state.wizardState.detectedModel
                 if (model) {
-                    paragraph "<b>Protocol:</b> ${model.smartIrId}"
-                    if (model.protocolInfo?.confidence) {
-                        def conf = (model.protocolInfo.confidence * 100).intValue()
-                        paragraph "<b>Detection Confidence:</b> ${conf}%"
-                    }
+                    paragraph "<b>Manufacturer:</b> ${model.manufacturer}"
+                    paragraph "<b>Model:</b> ${model.model}"
+                    paragraph "<b>SmartIR device ID:</b> ${model.deviceId}"
                 }
             }
 
@@ -65,12 +70,10 @@ def mainPage() {
                 paragraph "Send test commands to verify your HVAC configuration:"
                 paragraph ""
 
-                // Power commands
                 input "testPowerOn", "button", title: "Power ON", width: 6
                 input "testPowerOff", "button", title: "Power OFF", width: 6
                 paragraph ""
 
-                // Cooling commands
                 paragraph "<b>16°C Cool:</b>"
                 input "testCool16Quiet", "button", title: "16°C Cool Quiet", width: 4
                 input "testCool16Auto", "button", title: "16°C Cool Auto", width: 4
@@ -83,7 +86,6 @@ def mainPage() {
                 input "testCool24High", "button", title: "24°C Cool High", width: 4
                 paragraph ""
 
-                // Heating commands
                 paragraph "<b>30°C Heat:</b>"
                 input "testHeat30Quiet", "button", title: "30°C Heat Quiet", width: 4
                 input "testHeat30Auto", "button", title: "30°C Heat Auto", width: 4
@@ -91,7 +93,7 @@ def mainPage() {
             }
 
             section("Reconfigure") {
-                paragraph "Want to train a different remote or device?"
+                paragraph "Train a different remote or pick a different model:"
                 input "reconfigureNow", "button", title: "Reconfigure Device"
             }
 
@@ -104,10 +106,9 @@ def mainPage() {
             }
         }
     } else {
-        // Show welcome wizard for new setup
         dynamicPage(name: "mainPage", title: "Maestro Tuya Zigbee HVAC Setup Wizard", uninstall: true, install: false, nextPage: "selectDevice") {
             section("Welcome") {
-                paragraph "This wizard will help you configure your HVAC IR remote control using automatic protocol detection."
+                paragraph "This wizard configures your HVAC IR remote control by picking the brand and model from the SmartIR code library."
                 paragraph "You will need:\n• The physical HVAC remote\n• Access to the IR blaster device"
             }
 
@@ -123,10 +124,11 @@ def mainPage() {
             section("How It Works") {
                 paragraph "The wizard will:\n" +
                           "1. Select your IR blaster device\n" +
-                          "2. Learn an IR code from your remote\n" +
-                          "3. Automatically detect protocol using cloud API\n" +
-                          "4. Generate complete command set for your HVAC\n" +
-                          "5. Configure the device for complete HVAC control"
+                          "2. Pick your HVAC manufacturer\n" +
+                          "3. Pick the model\n" +
+                          "4. Download the recorded IR command set\n" +
+                          "5. Learn one code from your remote to confirm the blaster is wired up\n" +
+                          "6. Save the configuration to the device"
             }
 
             section("Settings") {
@@ -152,18 +154,15 @@ def selectDevice() {
         }
 
         if (irDevice) {
-            // Subscribe to device events when device is first selected
             log.info "Device selected: ${irDevice.displayName}"
-            log.info "Setting up event subscription..."
-            unsubscribe()  // Clear any old subscriptions
+            unsubscribe()
             subscribe(irDevice, "lastLearnedCode", "codeLearnedHandler")
-            log.info "✓ Subscribed to lastLearnedCode event from ${irDevice.displayName}"
+            log.info "Subscribed to lastLearnedCode event from ${irDevice.displayName}"
 
             section("Device Selected") {
                 paragraph "Device: ${irDevice.displayName}"
                 paragraph "✅ Ready to continue"
 
-                // Check if device has required methods
                 if (!deviceHasHvacSupport(irDevice)) {
                     paragraph "<hr>"
                     paragraph "⚠️ <b style='color:orange'>Warning:</b> This device may not support HVAC configuration."
@@ -175,22 +174,18 @@ def selectDevice() {
 }
 
 def selectManufacturer() {
-    // Fetch manufacturers if not already cached
-    if (!state.wizardState?.manufacturers) {
+    if (!state.wizardState?.v3?.manufacturers) {
         fetchManufacturers()
     }
 
-    // Check if manufacturer was selected and we should auto-redirect
-    def autoRedirect = state.wizardState?.readyForNextPage == true && state.wizardState?.detectedModel
+    def hasSelection = settings.selectedManufacturer && state.wizardState?.v3?.manufacturers?.contains(settings.selectedManufacturer)
 
-    dynamicPage(name: "selectManufacturer", title: "Select Manufacturer", install: false, nextPage: autoRedirect ? "verifyModel" : null) {
+    dynamicPage(name: "selectManufacturer", title: "Select Manufacturer", install: false, nextPage: hasSelection ? "selectModel" : null) {
         section("Select Your HVAC Manufacturer") {
-            paragraph "Choose your HVAC brand from the list below."
-            paragraph "We have pre-configured IR codes for these manufacturers."
+            paragraph "Choose your HVAC brand. The list comes from the SmartIR code library."
             paragraph ""
 
-            // Get manufacturers from state
-            def manufacturers = state.wizardState?.manufacturers ?: ["Loading..."]
+            def manufacturers = state.wizardState?.v3?.manufacturers ?: ["Loading..."]
 
             input "selectedManufacturer", "enum",
                   options: manufacturers,
@@ -200,136 +195,113 @@ def selectManufacturer() {
 
             input "refreshManufacturers", "button", title: "Refresh List"
 
-            // Show status if manufacturer was selected
-            if (state.wizardState?.manufacturerStatus) {
+            if (hasSelection) {
+                def count = state.wizardState?.v3?.manufacturerCounts?.get(settings.selectedManufacturer)
                 paragraph "<hr>"
-                paragraph "<b>Status:</b> ${state.wizardState.manufacturerStatus}"
+                paragraph "<b>Selected:</b> ${settings.selectedManufacturer}" + (count ? " (${count} models)" : "")
+                paragraph "<b>Click 'Next' below to pick a model...</b>"
+            }
+        }
+    }
+}
+
+def selectModel() {
+    // Clear cached devices when manufacturer changes
+    def cachedFor = state.wizardState?.v3?.devicesFor
+    if (cachedFor != settings.selectedManufacturer) {
+        state.wizardState?.v3?.devices = null
+        state.wizardState?.v3?.devicesFor = settings.selectedManufacturer
+    }
+
+    if (!state.wizardState?.v3?.devices) {
+        fetchDevicesForManufacturer(settings.selectedManufacturer)
+    }
+
+    def modelOptions = state.wizardState?.v3?.modelOptions ?: [:]
+    def hasSelection = settings.selectedDeviceId && state.wizardState?.v3?.detectedModel
+
+    dynamicPage(name: "selectModel", title: "Select Model", install: false, nextPage: hasSelection ? "learnCode" : null) {
+        section("Select Your HVAC Model") {
+            paragraph "<b>Manufacturer:</b> ${settings.selectedManufacturer}"
+            paragraph ""
+
+            if (!modelOptions) {
+                paragraph "Loading models..."
+            } else {
+                input "selectedDeviceId", "enum",
+                      options: modelOptions,
+                      title: "Model",
+                      required: false,
+                      submitOnChange: true
             }
 
-            // If manufacturer selected, show variant selection or generate button
-            if (settings.selectedManufacturer && !state.wizardState?.detectedModel) {
-                def variants = state.wizardState?.manufacturerData?.get(settings.selectedManufacturer) ?: []
-
-                if (variants.size() > 1) {
-                    // Multiple variants — ask user to pick one
-                    paragraph ""
-                    paragraph "<b>This manufacturer has multiple protocol variants.</b>"
-                    paragraph "Select which protocol to use:"
-                    input "selectedVariant", "enum",
-                          options: variants,
-                          title: "Protocol Variant",
-                          required: false,
-                          submitOnChange: true
-
-                    if (settings.selectedVariant) {
-                        paragraph ""
-                        input "generateFromManufacturer", "button", title: "Generate Commands for ${settings.selectedManufacturer} (${settings.selectedVariant})"
-                    }
-                } else {
-                    // Single or no variant — go straight to generate
-                    paragraph ""
-                    input "generateFromManufacturer", "button", title: "Generate Commands for ${settings.selectedManufacturer}"
-                }
-            }
-
-            // Show success if model detected
-            if (state.wizardState?.detectedModel && state.wizardState?.usedManufacturerSelection) {
-                paragraph "<hr>"
-                paragraph "✅ <b style='color: green;'>Commands Generated!</b>"
-                paragraph "Protocol: ${state.wizardState.detectedModel.smartIrId}"
+            if (settings.selectedDeviceId && !state.wizardState?.v3?.detectedModel) {
                 paragraph ""
-                paragraph "<b>Click 'Next' below to verify and complete setup...</b>"
-            }
-        }
-
-        section("Don't See Your Manufacturer?") {
-            paragraph "If your manufacturer isn't listed, you can learn the IR code directly from your remote."
-            href "learnCode", title: "Learn IR Code Manually", description: "Use your physical remote to teach the IR blaster"
-        }
-
-        section("Already Have an IR Code?") {
-            paragraph "Paste a Tuya Base64 IR code to identify the protocol:"
-            input "manualCode", "text",
-                  title: "IR Code",
-                  description: "Paste your Tuya Base64 IR code here",
-                  required: false,
-                  submitOnChange: false
-
-            if (settings.manualCode) {
-                input "testManualCode", "button", title: "Identify Protocol from Code"
+                input "loadCommandsBtn", "button", title: "Load Commands for Selected Model"
             }
 
-            // Show result if manual code was tested
-            if (state.wizardState?.manualCodeResult) {
+            if (state.wizardState?.v3?.loadStatus) {
                 paragraph "<hr>"
-                paragraph "${state.wizardState.manualCodeResult}"
+                paragraph "<b>Status:</b> ${state.wizardState.v3.loadStatus}"
+            }
+
+            if (hasSelection) {
+                def m = state.wizardState.v3.detectedModel
+                paragraph "<hr>"
+                paragraph "✅ <b style='color: green;'>Commands loaded</b>"
+                paragraph "<b>Model:</b> ${m.model}"
+                paragraph "<b>Operation modes:</b> ${m.modelData.operationModes?.join(', ')}"
+                paragraph "<b>Fan modes:</b> ${m.modelData.fanModes?.join(', ')}"
+                paragraph "<b>Temperature range:</b> ${m.modelData.minTemperature}°C - ${m.modelData.maxTemperature}°C"
+                paragraph "<b>Command count:</b> ${m.modelData.commands?.size()}"
+                paragraph ""
+                paragraph "<b>Click 'Next' below to learn one code to verify the IR blaster...</b>"
             }
         }
 
+        section("Change Manufacturer") {
+            href "selectManufacturer", title: "Back to Manufacturer", description: "Pick a different brand"
+        }
     }
 }
 
 def learnCode() {
-    // Check if we should auto-redirect to next page
     def autoRedirect = state.wizardState?.readyForNextPage == true
 
-    dynamicPage(name: "learnCode", title: "Learn IR Code", install: false, nextPage: autoRedirect ? "verifyModel" : null, refreshInterval: state.wizardState?.learningInProgress ? 2 : 0) {
+    dynamicPage(name: "learnCode", title: "Verify IR Blaster", install: false, nextPage: autoRedirect ? "verifyModel" : null, refreshInterval: state.wizardState?.learningInProgress ? 2 : 0) {
         section("Instructions") {
-            paragraph "<b>Step 1:</b> Click the 'Learn IR Code' button below"
+            paragraph "This step learns one IR code from your remote so you can confirm the blaster is wired up and pointing at the unit. The learned code is not used to identify your protocol — that's already set by the model you picked."
+            paragraph ""
+            paragraph "<b>Step 1:</b> Click 'Learn IR Code' below"
             paragraph "<b>Step 2:</b> Wait for the IR blaster LED to light up"
             paragraph "<b>Step 3:</b> Press any button on your physical HVAC remote"
             paragraph ""
-            paragraph "<b>Recommended buttons:</b> OFF, or Cool mode at 24°C with Auto fan"
-            paragraph "(The device will stay in learning mode for 10-15 seconds)"
+            paragraph "<i>If you'd rather skip this step, click 'Next' to go straight to the verify page.</i>"
         }
 
         section("Action") {
             input "triggerLearn", "button", title: "Learn IR Code"
+            input "skipLearn", "button", title: "Skip and Continue"
 
-            // Debug: Manual code entry
-            if (settings.debugLogging) {
-                paragraph "<hr>"
-                paragraph "<b>Debug: Manual Code Entry</b>"
-                input "manualCode", "text",
-                      title: "Enter IR Code Manually",
-                      description: "Paste a Tuya Base64 IR code for testing",
-                      required: false
-                input "testManualCode", "button", title: "Test Manual Code"
-            }
-
-            // Show current status
             if (state.wizardState?.learningStatus) {
                 paragraph "<hr>"
                 paragraph "<b>Status:</b> ${state.wizardState.learningStatus}"
             }
 
-            // Show learning in progress indicator
             if (state.wizardState?.learningInProgress == true) {
                 paragraph "⏳ <b style='color: orange;'>Learning in progress...</b>"
                 paragraph "Point your HVAC remote at the IR blaster and press a button now!"
                 paragraph "<i>Page will auto-refresh every 2 seconds...</i>"
             }
 
-            // Check if code was learned
             if (state.wizardState?.learnedCode) {
-                paragraph "✅ <b style='color: green;'>Code learned successfully!</b>"
+                paragraph "✅ <b style='color: green;'>Code received from blaster — wiring confirmed</b>"
                 paragraph "Code length: ${state.wizardState.learnedCode.length()} characters"
-                paragraph "Code preview: <code>${state.wizardState.learnedCode}</code>"
-
-                // Show detection status
-                if (state.wizardState.detectedModel) {
-                    paragraph "<hr>"
-                    paragraph "✅ <b style='color: green;'>Model Auto-Detected!</b>"
-                    paragraph "Protocol: ${state.wizardState.detectedModel.smartIrId}"
-                    paragraph "<hr>"
-                    paragraph "<b>Click 'Next' below to verify the detected model...</b>"
-
-                } else if (state.wizardState.matchError) {
-                    paragraph "<hr>"
-                    paragraph "⚠️ <b style='color: orange;'>Auto-Detection Status:</b>"
-                    paragraph "${state.wizardState.matchError}"
-                    paragraph "You can still proceed to manually verify or try learning again."
+                if (settings.debugLogging) {
+                    paragraph "Code preview: <code>${state.wizardState.learnedCode.take(120)}...</code>"
                 }
+                paragraph "<hr>"
+                paragraph "<b>Click 'Next' below to verify and complete setup...</b>"
             }
         }
 
@@ -338,61 +310,48 @@ def learnCode() {
             paragraph "• Hold remote 6-12 inches from IR blaster"
             paragraph "• Press and release remote button quickly"
         }
-
     }
 }
 
 def verifyModel() {
-    // Get detection results from state
-    def detectedModel = state.wizardState?.detectedModel
+    def detectedModel = state.wizardState?.v3?.detectedModel
 
-    dynamicPage(name: "verifyModel", title: "Verify Protocol", install: false) {
+    dynamicPage(name: "verifyModel", title: "Verify Selection", install: false) {
         if (detectedModel) {
-            section("Protocol Detected! ✅") {
-                paragraph "<b>Successfully identified your HVAC IR protocol!</b>"
-                paragraph ""
-                paragraph "<b>Protocol:</b> ${detectedModel.smartIrId}"
-                if (detectedModel.protocolInfo?.confidence) {
-                    def confidencePercent = (detectedModel.protocolInfo.confidence * 100).intValue()
-                    paragraph "<b>Confidence:</b> ${confidencePercent}%"
-                }
-                if (detectedModel.notes) {
-                    paragraph "<b>Notes:</b> ${detectedModel.notes}"
+            section("Selected Model") {
+                paragraph "<b>Manufacturer:</b> ${detectedModel.manufacturer}"
+                paragraph "<b>Model:</b> ${detectedModel.model}"
+                paragraph "<b>SmartIR device ID:</b> ${detectedModel.deviceId}"
+                if (detectedModel.modelData?.supportedModels) {
+                    paragraph "<b>Supported variants:</b> ${detectedModel.modelData.supportedModels.join(', ')}"
                 }
             }
 
             section("Supported Features") {
                 def modelData = detectedModel.modelData
                 if (modelData) {
-                    paragraph "<b>Operation Modes:</b> ${modelData.operationModes?.join(', ')}"
-                    paragraph "<b>Fan Speeds:</b> ${modelData.fanModes?.join(', ')}"
-                    paragraph "<b>Temperature Range:</b> ${modelData.minTemperature}°C - ${modelData.maxTemperature}°C"
+                    paragraph "<b>Operation modes:</b> ${modelData.operationModes?.join(', ')}"
+                    paragraph "<b>Fan modes:</b> ${modelData.fanModes?.join(', ')}"
+                    paragraph "<b>Temperature range:</b> ${modelData.minTemperature}°C - ${modelData.maxTemperature}°C"
+                    paragraph "<b>Command count:</b> ${modelData.commands?.size()}"
                 }
             }
 
-            if (detectedModel.detectedState) {
-                section("Detected State from Learned Code") {
-                    def ds = detectedModel.detectedState
-                    if (ds.mode == "off") {
-                        paragraph "The button you pressed: <b>Power OFF</b>"
-                    } else {
-                        paragraph "The button you pressed:"
-                        paragraph "• <b>Mode:</b> ${ds.mode?.toUpperCase()}"
-                        if (ds.temp) paragraph "• <b>Temperature:</b> ${ds.temp}°C"
-                        if (ds.fan) paragraph "• <b>Fan Speed:</b> ${ds.fan?.toUpperCase()}"
-                    }
+            if (state.wizardState?.learnedCode) {
+                section("IR Blaster Check") {
+                    paragraph "✅ Learned a ${state.wizardState.learnedCode.length()}-character code from the blaster — wiring confirmed."
                 }
             }
 
             section("Confirm") {
-                paragraph "Does this match your HVAC unit?"
+                paragraph "Save this configuration to your device?"
                 input "confirmModel", "bool",
                       title: "Yes, this is correct",
                       defaultValue: false,
                       submitOnChange: true
 
                 if (confirmModel == false) {
-                    href "learnCode", title: "Try Again", description: "Learn a different code"
+                    href "selectModel", title: "Pick a Different Model", description: "Go back to model selection"
                 }
 
                 if (confirmModel == true) {
@@ -400,27 +359,15 @@ def verifyModel() {
                 }
             }
         } else {
-            section("Protocol Not Detected ⚠️") {
-                paragraph "<b>Could not automatically identify HVAC protocol</b>"
-                paragraph ""
-                paragraph "This could mean:"
-                paragraph "• Protocol not in Maestro API database"
-                paragraph "• IR code was not learned correctly"
-                paragraph "• Remote uses an uncommon or proprietary protocol"
-            }
-
-            section("What To Do") {
-                paragraph "Try these steps:"
-                href "learnCode", title: "Learn Code Again", description: "Retry with a different button (try Cool/24°C/Auto)"
-                paragraph ""
-                paragraph "If detection continues to fail, your device may use an uncommon protocol."
+            section("No Model Selected ⚠️") {
+                paragraph "<b>No model selected yet.</b>"
+                href "selectManufacturer", title: "Pick Manufacturer", description: "Start the picker"
             }
         }
     }
 }
 
 def complete() {
-    // Save configuration to device
     def success = saveConfigToDevice()
 
     dynamicPage(name: "complete", title: "Setup Complete", install: true, uninstall: true) {
@@ -429,19 +376,19 @@ def complete() {
                 paragraph "<b>HVAC configuration saved successfully!</b>"
                 paragraph ""
                 paragraph "<b>Device:</b> ${irDevice.displayName}"
-                paragraph "<b>Protocol:</b> ${state.wizardState?.detectedModel?.smartIrId}"
+                def m = state.wizardState?.v3?.detectedModel
+                paragraph "<b>Manufacturer:</b> ${m?.manufacturer}"
+                paragraph "<b>Model:</b> ${m?.model}"
             }
 
             section("Test Commands") {
                 paragraph "Test your HVAC configuration:"
                 paragraph ""
 
-                // Power commands
                 input "testPowerOn", "button", title: "Power ON", width: 6
                 input "testPowerOff", "button", title: "Power OFF", width: 6
                 paragraph ""
 
-                // Cooling commands
                 paragraph "<b>16°C Cool:</b>"
                 input "testCool16Quiet", "button", title: "16°C Cool Quiet", width: 4
                 input "testCool16Auto", "button", title: "16°C Cool Auto", width: 4
@@ -454,7 +401,6 @@ def complete() {
                 input "testCool24High", "button", title: "24°C Cool High", width: 4
                 paragraph ""
 
-                // Heating commands
                 paragraph "<b>30°C Heat:</b>"
                 input "testHeat30Quiet", "button", title: "30°C Heat Quiet", width: 4
                 input "testHeat30Auto", "button", title: "30°C Heat Auto", width: 4
@@ -470,37 +416,35 @@ def complete() {
 }
 
 /*********
- * API INTEGRATION
+ * API INTEGRATION (v3)
  */
 
 /**
- * Fetch list of manufacturers with known good codes from API.
- * Stores result in state.wizardState.manufacturers
+ * GET /api/v3/manufacturers
+ * Populates state.wizardState.v3.manufacturers and manufacturerCounts.
  */
 def fetchManufacturers() {
-    log.info "Fetching manufacturers from Maestro API v2..."
+    log.info "Fetching manufacturers from Maestro API v3..."
 
     try {
         def params = [
-            uri: MAESTRO_API_URL + "/api/v2/manufacturers",
+            uri: MAESTRO_API_URL + "/api/v3/manufacturers",
             headers: [
-                "User-Agent": "Hubitat-HVAC-Wizard/1.0"
+                "User-Agent": "Hubitat-HVAC-Wizard/3.0"
             ],
-            timeout: 15
+            timeout: 30
         ]
 
         httpGet(params) { resp ->
             if (resp.status == 200) {
-                def manufacturerData = resp.data?.manufacturers ?: []
-                log.info "✓ Retrieved ${manufacturerData.size()} manufacturers"
+                def list = resp.data?.manufacturers ?: []
+                log.info "Retrieved ${list.size()} manufacturers"
 
                 if (!state.wizardState) state.wizardState = [:]
-                // Store full manufacturer data (name + variants) for variant selection
-                state.wizardState.manufacturerData = manufacturerData.collectEntries { [(it.name): it.variants ?: []] }
-                // Store flat name list for the enum dropdown
-                state.wizardState.manufacturers = manufacturerData.collect { it.name }
-
-                return state.wizardState.manufacturers
+                if (!state.wizardState.v3) state.wizardState.v3 = [:]
+                state.wizardState.v3.manufacturers = list.collect { it.name }
+                state.wizardState.v3.manufacturerCounts = list.collectEntries { [(it.name): it.device_count] }
+                return state.wizardState.v3.manufacturers
             } else {
                 log.error "API returned status ${resp.status}"
                 return []
@@ -509,268 +453,198 @@ def fetchManufacturers() {
     } catch (Exception e) {
         log.error "Failed to fetch manufacturers: ${e.message}"
         if (!state.wizardState) state.wizardState = [:]
-        state.wizardState.manufacturers = ["Error loading manufacturers"]
-        state.wizardState.manufacturerData = [:]
+        if (!state.wizardState.v3) state.wizardState.v3 = [:]
+        state.wizardState.v3.manufacturers = ["Error loading manufacturers"]
+        state.wizardState.v3.manufacturerCounts = [:]
         return []
     }
 }
 
 /**
- * Generate commands for a manufacturer using known good codes.
- * Calls /api/generate-from-manufacturer endpoint.
+ * GET /api/v3/manufacturers/{name}/devices
+ * Populates state.wizardState.v3.devices and modelOptions (id -> label).
  */
-def generateFromManufacturer(String manufacturer, String variant = null) {
-    log.info "Generating commands for manufacturer: ${manufacturer}" + (variant ? " variant: ${variant}" : "")
+def fetchDevicesForManufacturer(String manufacturer) {
+    log.info "Fetching devices for ${manufacturer}..."
 
-    if (!manufacturer) {
-        log.error "No manufacturer specified"
+    try {
+        def encoded = java.net.URLEncoder.encode(manufacturer, "UTF-8")
+        def params = [
+            uri: MAESTRO_API_URL + "/api/v3/manufacturers/" + encoded + "/devices",
+            headers: [
+                "User-Agent": "Hubitat-HVAC-Wizard/3.0"
+            ],
+            timeout: 30
+        ]
+
+        httpGet(params) { resp ->
+            if (resp.status == 200) {
+                def devices = resp.data?.devices ?: []
+                log.info "Retrieved ${devices.size()} devices for ${manufacturer}"
+
+                if (!state.wizardState) state.wizardState = [:]
+                if (!state.wizardState.v3) state.wizardState.v3 = [:]
+
+                // Hubitat enum options: Map<value, displayLabel>. Value must be a string.
+                def options = [:]
+                devices.each { d ->
+                    def models = d.supported_models ?: []
+                    def label = models ? models.join(' / ') : "Device ${d.id}"
+                    options[d.id.toString()] = "${label} (id ${d.id})"
+                }
+
+                state.wizardState.v3.devices = devices
+                state.wizardState.v3.modelOptions = options
+                return devices
+            } else {
+                log.error "API returned status ${resp.status}"
+                return []
+            }
+        }
+    } catch (Exception e) {
+        log.error "Failed to fetch devices: ${e.message}"
+        if (!state.wizardState) state.wizardState = [:]
+        if (!state.wizardState.v3) state.wizardState.v3 = [:]
+        state.wizardState.v3.devices = []
+        state.wizardState.v3.modelOptions = [:]
+        return []
+    }
+}
+
+/**
+ * GET /api/v3/devices/{id}
+ * Fetches the full command set for a device and transforms it into the
+ * shape the driver expects.
+ */
+def fetchDeviceCommands(Integer deviceId) {
+    log.info "Fetching commands for device id ${deviceId}..."
+
+    if (!deviceId) {
+        log.error "No device id supplied"
         return null
     }
 
     try {
-        def requestBody = [
-            manufacturer: manufacturer
-        ]
-        if (variant) {
-            requestBody.variant = variant
-        }
-
-        def jsonBody = groovy.json.JsonOutput.toJson(requestBody)
-        log.debug "Request body: ${jsonBody}"
-
         def params = [
-            uri: MAESTRO_API_URL + "/api/v2/generate-from-manufacturer",
+            uri: MAESTRO_API_URL + "/api/v3/devices/" + deviceId,
             headers: [
-                "Content-Type": "application/json",
-                "User-Agent": "Hubitat-HVAC-Wizard/1.0"
+                "User-Agent": "Hubitat-HVAC-Wizard/3.0"
             ],
-            body: jsonBody,
-            timeout: 30,
-            requestContentType: "application/json"
+            timeout: 30
         ]
 
         def result = null
-        httpPost(params) { resp ->
+        httpGet(params) { resp ->
             if (resp.status == 200) {
                 result = resp.data
-                log.info "✓ Commands generated for ${manufacturer}"
-                log.debug "Response: ${result}"
+                log.info "Retrieved ${result?.commands?.size()} commands for device ${deviceId}"
             } else {
                 log.error "API returned status ${resp.status}"
-                return null
             }
         }
 
         if (!result) {
-            log.warn "No result from API"
             return null
         }
 
-        // Transform to same format as matchCodeToModel
+        def models = result.supported_models ?: []
+        def primaryModel = models ? models[0] : "device-${deviceId}"
+
         return [
-            smartIrId: result.protocol,
-            model: result.model ?: result.protocol,
+            deviceId: deviceId,
+            manufacturer: result.manufacturer,
+            model: primaryModel,
             modelData: [
-                supportedModels: [],
-                commands: result.commands,
+                supportedModels: models,
+                commands: transformV3Commands(result.commands ?: []),
                 minTemperature: result.min_temperature ?: 16,
                 maxTemperature: result.max_temperature ?: 30,
                 operationModes: result.operation_modes ?: [],
-                fanModes: result.fan_modes ?: []
-            ],
-            detectedState: result.detected_state ?: [mode: "unknown", temp: null, fan: null],
-            protocolInfo: [
-                protocol: result.protocol,
-                confidence: result.confidence ?: 1.0
-            ],
-            notes: result.notes
+                fanModes: result.fan_modes ?: [],
+                swingModes: result.swing_modes ?: []
+            ]
         ]
 
-    } catch (groovyx.net.http.HttpResponseException e) {
-        log.error "Maestro API returned error: ${e.statusCode} - ${e.message}"
-        return null
     } catch (Exception e) {
-        log.error "Failed to generate commands: ${e.message}"
+        log.error "Failed to fetch device commands: ${e.message}"
         return null
     }
 }
 
 /**
- * Identify protocol from learned IR code and generate full command set.
+ * Translate v3 CommandInfo entries to the {name, tuya_code} shape the
+ * driver consumes.
  *
- * Calls Maestro API to detect protocol and generate commands:
- * 1. Send Tuya Base64 code to API
- * 2. API returns protocol info and complete command set
+ * v3 name format: MODE[_FAN][_TEMP][_SWING_X] (e.g. "OFF", "COOL_AUTO_22").
+ * Driver expects: "power_off" / "{temp}_{mode}_{fan}" lowercase.
+ *
+ * Where a device has multiple swing variants for the same mode/fan/temp,
+ * the first one wins.
  */
-def matchCodeToModel(String learnedCode) {
-    log.debug "matchCodeToModel() called - using Maestro API"
-    log.debug "  Code length: ${learnedCode?.length()}"
+List<Map> transformV3Commands(List rawCommands) {
+    def out = []
+    def seen = new HashSet<String>()
 
-    // Input validation: check for empty or invalid code
-    if (!learnedCode || learnedCode.trim().isEmpty()) {
-        log.warn "Cannot match empty or null IR code"
-        return null
+    rawCommands.each { c ->
+        String mode = (c.mode ?: "").toString().toLowerCase()
+        String fan = c.fan ? c.fan.toString().toLowerCase() : null
+        Integer temp = c.temperature != null ? (c.temperature as Number).intValue() : null
+        String tuya = c.tuya_code
+
+        if (!tuya) return
+
+        String driverName
+        if (mode == "off") {
+            driverName = "power_off"
+        } else if (temp != null && fan) {
+            driverName = "${temp}_${mode}_${fan}"
+        } else if (fan) {
+            driverName = "${mode}_${fan}"
+        } else {
+            driverName = mode
+        }
+
+        if (seen.add(driverName)) {
+            out << [name: driverName, tuya_code: tuya]
+        }
     }
 
-    // Normalize learned code (remove all whitespace)
-    String normalizedCode = learnedCode.replaceAll(/\s/, "")
-
-    // Validate code length (typical Base64 IR codes are 50-500 chars)
-    if (normalizedCode.length() < 4) {
-        log.warn "IR code too short (${normalizedCode.length()} chars), likely invalid"
-        return null
-    }
-
-    try {
-        log.info "Calling Maestro API to identify protocol..."
-
-        // Call API to identify protocol from Tuya code
-        def requestBody = [
-            tuya_code: normalizedCode
-        ]
-
-        // Convert to JSON string explicitly
-        def jsonBody = groovy.json.JsonOutput.toJson(requestBody)
-        log.debug "Request body: ${jsonBody}"
-
-        def params = [
-            uri: MAESTRO_API_URL + "/api/identify",
-            headers: [
-                "Content-Type": "application/json",
-                "User-Agent": "Hubitat-HVAC-Wizard/1.0"
-            ],
-            body: jsonBody,
-            timeout: 30,
-            requestContentType: "application/json"
-        ]
-
-        def result = null
-        httpPost(params) { resp ->
-            if (resp.status == 200) {
-                result = resp.data
-                // Store raw API response for debugging
-                if (!state.wizardState) state.wizardState = [:]
-                state.wizardState.apiResponse = result
-                log.info "✓ API response received"
-                log.debug "Response: ${result}"
-            } else {
-                log.error "API returned status ${resp.status}"
-                return null
-            }
-        }
-
-        if (!result) {
-            log.warn "No result from API"
-            return null
-        }
-
-        // Check if protocol was detected
-        if (!result.protocol) {
-            log.warn "API could not identify protocol"
-            if (result.error) {
-                log.warn "API error: ${result.error}"
-            }
-            return null
-        }
-
-        log.info "✓ Protocol identified: ${result.protocol}"
-        if (result.confidence) {
-            log.info "  Confidence: ${result.confidence}"
-        }
-
-        // Store commands directly from API (no transformation)
-        // API returns: [{name: "set_temp_24c", tuya_code: "..."}, {name: "set_mode_cool", tuya_code: "..."}, ...]
-        return [
-            smartIrId: result.protocol,
-            model: result.model ?: result.protocol,
-            modelData: [
-                supportedModels: result.supportedModels ?: [],
-                commands: result.commands,  // Store as-is from API
-                minTemperature: result.minTemperature ?: 16,
-                maxTemperature: result.maxTemperature ?: 30,
-                operationModes: result.operationModes ?: [],
-                fanModes: result.fanModes ?: []
-            ],
-            detectedState: result.detectedState ?: [mode: "unknown", temp: null, fan: null],
-            protocolInfo: [
-                protocol: result.protocol,
-                confidence: result.confidence
-            ],
-            notes: result.notes
-        ]
-
-    } catch (groovyx.net.http.HttpResponseException e) {
-        log.error "Maestro API returned error: ${e.statusCode} - ${e.message}"
-
-        // Try to get error response body
-        try {
-            def errorBody = e.response?.data
-            if (errorBody) {
-                log.error "API error details: ${errorBody}"
-                // Store error response for debugging
-                if (!state.wizardState) state.wizardState = [:]
-                state.wizardState.apiResponse = [
-                    error: true,
-                    statusCode: e.statusCode,
-                    message: e.message,
-                    details: errorBody
-                ]
-            }
-        } catch (Exception ignored) {
-            // Couldn't parse error response
-        }
-
-        return null
-    } catch (Exception e) {
-        log.error "Failed to call Maestro API: ${e.message}"
-        log.error "Stack trace: ${e}"
-
-        // Store error for debugging
-        if (!state.wizardState) state.wizardState = [:]
-        state.wizardState.apiResponse = [
-            error: true,
-            message: e.message,
-            stackTrace: e.toString()
-        ]
-
-        return null
-    }
+    return out
 }
 
 /**
  * Save HVAC configuration to the driver
  */
 def saveConfigToDevice() {
-    if (!state.wizardState?.detectedModel) {
-        log.error "No detected model to save"
+    def detected = state.wizardState?.v3?.detectedModel
+    if (!detected) {
+        log.error "No selected model to save"
         return false
     }
 
-    def detectedModel = state.wizardState.detectedModel
-    def modelData = detectedModel.modelData
-
+    def modelData = detected.modelData
     if (!modelData) {
         log.error "No model data available"
         return false
     }
 
     try {
-        // Build full configuration
         def config = [
-            model: detectedModel.model,
-            commands: modelData.commands ?: [:],
+            model: detected.model,
+            brand: detected.manufacturer,
+            commands: modelData.commands ?: [],
             minTemperature: modelData.minTemperature ?: 16,
             maxTemperature: modelData.maxTemperature ?: 30,
             operationModes: modelData.operationModes ?: [],
             fanModes: modelData.fanModes ?: []
         ]
 
-        // Call driver method to save config
         irDevice.setHvacConfig(config)
-
         log.info "HVAC configuration saved to ${irDevice.displayName}"
 
-        // Update app name to include device name for easy identification
+        // Mirror to the legacy detectedModel slot so mainPage status renders consistently
+        state.wizardState.detectedModel = detected
+
         def newLabel = "Maestro HVAC: ${irDevice.displayName}"
         app.updateLabel(newLabel)
         log.info "App renamed to: ${newLabel}"
@@ -783,12 +657,8 @@ def saveConfigToDevice() {
     }
 }
 
-/**
- * Check if device has HVAC support (has required methods)
- */
 def deviceHasHvacSupport(device) {
     try {
-        // Try to call a harmless method that should exist
         device.hasCommand("setHvacConfig")
         return true
     } catch (Exception e) {
@@ -796,24 +666,15 @@ def deviceHasHvacSupport(device) {
     }
 }
 
-/**
- * Check if device appears to be online and responsive
- * Returns a map with [online: boolean, status: string, lastActivity: timestamp]
- */
 def getDeviceStatus(device) {
     if (!device) {
         return [online: false, status: "No device selected", lastActivity: null]
     }
 
     try {
-        // Check last activity time
         def lastActivity = device.getLastActivity()
         def now = new Date().time
         def timeSinceActivity = lastActivity ? (now - lastActivity.time) : null
-
-        // Device is considered online if:
-        // 1. Has recent activity (within last 24 hours), OR
-        // 2. Has valid state attributes
 
         def hasRecentActivity = timeSinceActivity != null && timeSinceActivity < (24 * 60 * 60 * 1000)
         def hasState = device.currentStates?.size() > 0
@@ -821,39 +682,16 @@ def getDeviceStatus(device) {
         if (hasRecentActivity) {
             def minutesAgo = (timeSinceActivity / (60 * 1000)).intValue()
             def hoursAgo = (minutesAgo / 60).intValue()
-
-            def activityText = hoursAgo > 0 ?
-                "${hoursAgo} hour(s) ago" :
-                "${minutesAgo} minute(s) ago"
-
-            return [
-                online: true,
-                status: "Online - Last activity: ${activityText}",
-                lastActivity: lastActivity,
-                timeSinceActivity: timeSinceActivity
-            ]
+            def activityText = hoursAgo > 0 ? "${hoursAgo} hour(s) ago" : "${minutesAgo} minute(s) ago"
+            return [online: true, status: "Online - Last activity: ${activityText}", lastActivity: lastActivity, timeSinceActivity: timeSinceActivity]
         } else if (hasState) {
-            return [
-                online: true,
-                status: "Online - Has device state",
-                lastActivity: lastActivity,
-                timeSinceActivity: timeSinceActivity
-            ]
+            return [online: true, status: "Online - Has device state", lastActivity: lastActivity, timeSinceActivity: timeSinceActivity]
         } else {
-            return [
-                online: false,
-                status: lastActivity ? "Offline - No recent activity" : "Offline - Never seen",
-                lastActivity: lastActivity,
-                timeSinceActivity: timeSinceActivity
-            ]
+            return [online: false, status: lastActivity ? "Offline - No recent activity" : "Offline - Never seen", lastActivity: lastActivity, timeSinceActivity: timeSinceActivity]
         }
     } catch (Exception e) {
         log.error "Error checking device status: ${e.message}"
-        return [
-            online: false,
-            status: "Error checking status: ${e.message}",
-            lastActivity: null
-        ]
+        return [online: false, status: "Error checking status: ${e.message}", lastActivity: null]
     }
 }
 
@@ -863,16 +701,13 @@ def getDeviceStatus(device) {
 
 def installed() {
     log.info "HVAC Setup Wizard installed"
-    log.debug "Device will be selected during wizard flow, no initialization needed yet"
 }
 
 def updated() {
     log.info "HVAC Setup Wizard updated"
-    log.debug "Re-initializing subscriptions..."
     unsubscribe()
     initialize()
 
-    // Update app label if device is selected and we don't have a custom name
     if (irDevice && !app.label?.contains(irDevice.displayName)) {
         def newLabel = "Maestro HVAC: ${irDevice.displayName}"
         app.updateLabel(newLabel)
@@ -883,21 +718,20 @@ def updated() {
 def initialize() {
     log.info "=== Initialize called ==="
 
-    // Re-subscribe to device events if device is already selected
-    // (This handles app restart/update scenarios)
     if (irDevice) {
         log.info "Re-subscribing to device ${irDevice.displayName}"
         unsubscribe()
         subscribe(irDevice, "lastLearnedCode", "codeLearnedHandler")
-        log.info "✓ Event subscription active"
+        log.info "Event subscription active"
     } else {
         log.debug "No device selected yet, will subscribe when device is chosen"
     }
 
-    // Initialize wizard state if needed
     if (!state.wizardState) {
         state.wizardState = [:]
-        log.debug "Initialized wizard state"
+    }
+    if (!state.wizardState.v3) {
+        state.wizardState.v3 = [:]
     }
 
     log.info "=== Initialize complete ==="
@@ -911,261 +745,124 @@ def uninstalled() {
  * EVENT HANDLERS
  */
 
-/**
- * Handle button press from UI
- */
 def appButtonHandler(btn) {
     log.info "Button pressed: ${btn}"
 
     switch (btn) {
         case "refreshManufacturers":
             log.info "=== Refreshing Manufacturer List ==="
+            if (state.wizardState?.v3) {
+                state.wizardState.v3.manufacturers = null
+                state.wizardState.v3.manufacturerCounts = null
+            }
             fetchManufacturers()
             break
 
-        case "generateFromManufacturer":
-            log.info "=== Generating Commands from Manufacturer ==="
-            if (!settings.selectedManufacturer) {
-                log.error "No manufacturer selected"
+        case "loadCommandsBtn":
+            log.info "=== Loading Commands for Selected Model ==="
+            if (!settings.selectedDeviceId) {
+                log.error "No model selected"
                 return
             }
-
             try {
                 if (!state.wizardState) state.wizardState = [:]
-                def variants = state.wizardState?.manufacturerData?.get(settings.selectedManufacturer) ?: []
-                def variant = (variants.size() > 1) ? settings.selectedVariant : null
-                state.wizardState.manufacturerStatus = "Generating commands for ${settings.selectedManufacturer}${variant ? ' (' + variant + ')' : ''}..."
+                if (!state.wizardState.v3) state.wizardState.v3 = [:]
 
-                def detectedModel = generateFromManufacturer(settings.selectedManufacturer, variant)
+                Integer deviceId = settings.selectedDeviceId.toInteger()
+                state.wizardState.v3.loadStatus = "Loading commands for device ${deviceId}..."
 
-                if (detectedModel) {
-                    log.info "✅ Commands generated successfully!"
-                    log.info "Protocol: ${detectedModel.smartIrId}"
-
-                    state.wizardState.detectedModel = detectedModel
-                    state.wizardState.usedManufacturerSelection = true
-                    state.wizardState.readyForNextPage = true
-                    state.wizardState.manufacturerStatus = "Success! Commands generated for ${settings.selectedManufacturer}"
+                def detected = fetchDeviceCommands(deviceId)
+                if (detected) {
+                    log.info "Commands loaded for model ${detected.model}"
+                    state.wizardState.v3.detectedModel = detected
+                    state.wizardState.v3.loadStatus = "Loaded ${detected.modelData.commands?.size()} commands"
                 } else {
-                    log.error "Failed to generate commands"
-                    state.wizardState.detectedModel = null
-                    state.wizardState.readyForNextPage = false
-                    state.wizardState.manufacturerStatus = "Failed to generate commands for ${settings.selectedManufacturer}"
+                    log.error "Failed to load commands"
+                    state.wizardState.v3.detectedModel = null
+                    state.wizardState.v3.loadStatus = "Failed to load commands for device ${deviceId}"
                 }
             } catch (Exception e) {
-                log.error "Error generating commands: ${e.message}"
-                state.wizardState.manufacturerStatus = "Error: ${e.message}"
+                log.error "Error loading commands: ${e.message}"
+                state.wizardState.v3.loadStatus = "Error: ${e.message}"
             }
             break
 
         case "triggerLearn":
-            log.info "=== Starting IR Code Learning ==="
-            if (irDevice) {
-                try {
-                    log.debug "Device: ${irDevice.displayName}"
-                } catch (Exception e) {
-                    log.debug "Device: ${irDevice}"
-                }
-            }
-
+            log.info "=== Starting IR Code Learning (Verification) ==="
             if (!irDevice) {
                 log.error "No device selected"
                 return
             }
 
             try {
-                // Initialize wizard state
                 if (!state.wizardState) state.wizardState = [:]
-
-                // Clear previous learning attempt
                 state.wizardState.learnedCode = null
-                state.wizardState.detectedModel = null
-                state.wizardState.matchError = null
                 state.wizardState.learningStatus = "Waiting for IR signal..."
-                log.debug "Cleared previous learning state"
 
-                // Verify device has the learn command
                 if (!irDevice.hasCommand("learn")) {
                     log.error "Device does not have 'learn' command!"
-                    log.error "Available commands: ${irDevice.supportedCommands.collect { it.name }}"
                     state.wizardState.learningStatus = "Error: Device missing learn command"
                     return
                 }
 
-                // Call driver's learn method
                 log.info "Calling irDevice.learn('wizard')"
-                log.debug "Device ID: ${irDevice.id}, Device DNI: ${irDevice.deviceNetworkId}"
-
-                def result = irDevice.learn("wizard")
-
-                log.info "learn() returned: ${result}"
-
+                irDevice.learn("wizard")
                 state.wizardState.learningInProgress = true
-                log.info "✓ Learn command sent to device - LED should be blinking"
-                log.info "Point your remote at the IR blaster and press a button within 5 seconds"
+                log.info "Learn command sent - LED should be blinking"
 
             } catch (Exception e) {
                 log.error "Failed to trigger learn: ${e.message}"
-                log.error "Full error: ${e}"
                 state.wizardState.learningStatus = "Error: ${e.message}"
             }
             break
 
-        case "testManualCode":
-            log.info "=== Testing Manual Code Entry ==="
-            if (settings.manualCode) {
-                log.info "Manual code length: ${settings.manualCode.length()}"
-
-                // Initialize wizard state
-                if (!state.wizardState) state.wizardState = [:]
-
-                // Store the manual code
-                state.wizardState.learnedCode = settings.manualCode
-                state.wizardState.learningInProgress = false
-                state.wizardState.learningStatus = "Testing manual code..."
-                state.wizardState.manualCodeResult = "Identifying protocol..."
-
-                // Try to match it
-                def detectedModel = matchCodeToModel(settings.manualCode)
-                if (detectedModel) {
-                    state.wizardState.detectedModel = detectedModel
-                    state.wizardState.matchError = null
-                    state.wizardState.readyForNextPage = true
-                    state.wizardState.learningStatus = "Manual code matched successfully!"
-                    state.wizardState.manualCodeResult = "✅ <b style='color: green;'>Protocol Identified: ${detectedModel.smartIrId}</b><br>Click 'Next' to verify and complete setup."
-                    log.info "✓ Manual code matched to ${detectedModel.smartIrId}"
-                } else {
-                    state.wizardState.detectedModel = null
-                    state.wizardState.matchError = "Could not identify protocol"
-                    state.wizardState.readyForNextPage = false
-                    state.wizardState.learningStatus = "Manual code could not be matched"
-                    state.wizardState.manualCodeResult = "⚠️ <b style='color: orange;'>Could not identify protocol</b><br>Try a different code or select a manufacturer above."
-                    log.warn "Manual code did not match any protocol"
-                }
-            } else {
-                log.warn "No manual code provided"
-                if (!state.wizardState) state.wizardState = [:]
-                state.wizardState.manualCodeResult = "⚠️ Please enter an IR code first"
-            }
+        case "skipLearn":
+            log.info "=== Skipping Learn Step ==="
+            if (!state.wizardState) state.wizardState = [:]
+            state.wizardState.learningStatus = "Skipped"
+            state.wizardState.learningInProgress = false
+            state.wizardState.readyForNextPage = true
             break
 
         case "reconfigureNow":
             log.info "=== Starting Reconfiguration ==="
-            // Clear wizard state to start fresh
-            state.wizardState = [:]
-            log.info "✓ Wizard state cleared - ready to reconfigure"
-            // User will be redirected to selectDevice page by the page flow
+            state.wizardState = [v3: [:]]
+            log.info "Wizard state cleared - ready to reconfigure"
             break
 
         // Test command buttons
         case "testPowerOn":
-            log.info "Sending test command: power_on"
-            if (irDevice?.hasCommand("hvacSendCommandName")) {
-                irDevice.hvacSendCommandName("power_on")
-                log.info "✓ power_on command sent"
-            } else {
-                log.error "Device does not have hvacSendCommandName command"
-            }
+            sendTestCommand("power_on")
             break
-
         case "testPowerOff":
-            log.info "Sending test command: power_off"
-            if (irDevice?.hasCommand("hvacSendCommandName")) {
-                irDevice.hvacSendCommandName("power_off")
-                log.info "✓ power_off command sent"
-            } else {
-                log.error "Device does not have hvacSendCommandName command"
-            }
+            sendTestCommand("power_off")
             break
-
         case "testCool16Quiet":
-            log.info "Sending test command: 16_cool_quiet"
-            if (irDevice?.hasCommand("hvacSendCommandName")) {
-                irDevice.hvacSendCommandName("16_cool_quiet")
-                log.info "✓ 16_cool_quiet command sent"
-            } else {
-                log.error "Device does not have hvacSendCommandName command"
-            }
+            sendTestCommand("16_cool_quiet")
             break
-
         case "testCool16Auto":
-            log.info "Sending test command: 16_cool_auto"
-            if (irDevice?.hasCommand("hvacSendCommandName")) {
-                irDevice.hvacSendCommandName("16_cool_auto")
-                log.info "✓ 16_cool_auto command sent"
-            } else {
-                log.error "Device does not have hvacSendCommandName command"
-            }
+            sendTestCommand("16_cool_auto")
             break
-
         case "testCool16High":
-            log.info "Sending test command: 16_cool_high"
-            if (irDevice?.hasCommand("hvacSendCommandName")) {
-                irDevice.hvacSendCommandName("16_cool_high")
-                log.info "✓ 16_cool_high command sent"
-            } else {
-                log.error "Device does not have hvacSendCommandName command"
-            }
+            sendTestCommand("16_cool_high")
             break
-
         case "testCool24Quiet":
-            log.info "Sending test command: 24_cool_quiet"
-            if (irDevice?.hasCommand("hvacSendCommandName")) {
-                irDevice.hvacSendCommandName("24_cool_quiet")
-                log.info "✓ 24_cool_quiet command sent"
-            } else {
-                log.error "Device does not have hvacSendCommandName command"
-            }
+            sendTestCommand("24_cool_quiet")
             break
-
         case "testCool24Auto":
-            log.info "Sending test command: 24_cool_auto"
-            if (irDevice?.hasCommand("hvacSendCommandName")) {
-                irDevice.hvacSendCommandName("24_cool_auto")
-                log.info "✓ 24_cool_auto command sent"
-            } else {
-                log.error "Device does not have hvacSendCommandName command"
-            }
+            sendTestCommand("24_cool_auto")
             break
-
         case "testCool24High":
-            log.info "Sending test command: 24_cool_high"
-            if (irDevice?.hasCommand("hvacSendCommandName")) {
-                irDevice.hvacSendCommandName("24_cool_high")
-                log.info "✓ 24_cool_high command sent"
-            } else {
-                log.error "Device does not have hvacSendCommandName command"
-            }
+            sendTestCommand("24_cool_high")
             break
-
         case "testHeat30Quiet":
-            log.info "Sending test command: 30_heat_quiet"
-            if (irDevice?.hasCommand("hvacSendCommandName")) {
-                irDevice.hvacSendCommandName("30_heat_quiet")
-                log.info "✓ 30_heat_quiet command sent"
-            } else {
-                log.error "Device does not have hvacSendCommandName command"
-            }
+            sendTestCommand("30_heat_quiet")
             break
-
         case "testHeat30Auto":
-            log.info "Sending test command: 30_heat_auto"
-            if (irDevice?.hasCommand("hvacSendCommandName")) {
-                irDevice.hvacSendCommandName("30_heat_auto")
-                log.info "✓ 30_heat_auto command sent"
-            } else {
-                log.error "Device does not have hvacSendCommandName command"
-            }
+            sendTestCommand("30_heat_auto")
             break
-
         case "testHeat30High":
-            log.info "Sending test command: 30_heat_high"
-            if (irDevice?.hasCommand("hvacSendCommandName")) {
-                irDevice.hvacSendCommandName("30_heat_high")
-                log.info "✓ 30_heat_high command sent"
-            } else {
-                log.error "Device does not have hvacSendCommandName command"
-            }
+            sendTestCommand("30_heat_high")
             break
 
         default:
@@ -1173,71 +870,39 @@ def appButtonHandler(btn) {
     }
 }
 
+def sendTestCommand(String commandName) {
+    log.info "Sending test command: ${commandName}"
+    if (irDevice?.hasCommand("hvacSendCommandName")) {
+        irDevice.hvacSendCommandName(commandName)
+        log.info "${commandName} command sent"
+    } else {
+        log.error "Device does not have hvacSendCommandName command"
+    }
+}
+
 /**
- * Handle learned code event from device
+ * Handle learned code event from device (verification only — v3 picks the
+ * protocol from the user's model choice, not from this code).
  */
 def codeLearnedHandler(evt) {
     log.info "=== IR Code Learned Event Received ==="
     log.info "Code length: ${evt.value?.length()} characters"
-    log.debug "Code preview: ${evt.value}"
 
     def learnedCode = evt.value
 
     if (!learnedCode) {
-        log.error "❌ Empty code received - learning failed"
+        log.error "Empty code received - learning failed"
         if (!state.wizardState) state.wizardState = [:]
         state.wizardState.learningStatus = "Failed: Empty code received"
         state.wizardState.learningInProgress = false
         return
     }
 
-    // Store in wizard state
     if (!state.wizardState) state.wizardState = [:]
     state.wizardState.learnedCode = learnedCode
     state.wizardState.learningInProgress = false
-    state.wizardState.learningStatus = "Code received, matching to model..."
+    state.wizardState.learningStatus = "Code received - IR blaster wiring confirmed"
+    state.wizardState.readyForNextPage = true
 
-    log.info "✓ Code stored in wizard state"
-
-    // Try to detect protocol from code
-    log.info "=== Starting Protocol Detection ==="
-    log.info "Normalized code length: ${learnedCode.replaceAll(/\s/, '').length()}"
-
-    try {
-        def detectedModel = matchCodeToModel(learnedCode)
-
-        if (detectedModel) {
-            log.info "✅ Protocol Detected Successfully!"
-            log.info "Protocol: ${detectedModel.smartIrId}"
-            log.info "Confidence: ${detectedModel.protocolInfo?.confidence}"
-            if (detectedModel.notes) {
-                log.info "Notes: ${detectedModel.notes}"
-            }
-
-            state.wizardState.detectedModel = detectedModel
-            state.wizardState.matchError = null
-            state.wizardState.learningStatus = "Success! Protocol detected: ${detectedModel.model}"
-            state.wizardState.readyForNextPage = true  // Signal for auto-redirect
-
-        } else {
-            log.warn "❌ Could not identify protocol from IR code"
-            log.debug "This could mean:"
-            log.debug "  - Protocol not in IRremoteESP8266 database"
-            log.debug "  - Code doesn't match expected timing patterns"
-            log.debug "  - IR code was not learned correctly"
-
-            state.wizardState.detectedModel = null
-            state.wizardState.matchError = "Could not identify protocol from IR timing patterns"
-            state.wizardState.learningStatus = "No protocol match found"
-            state.wizardState.readyForNextPage = false
-        }
-    } catch (Exception e) {
-        log.error "❌ Error during protocol detection: ${e.message}"
-        log.error "Stack trace: ${e}"
-        state.wizardState.matchError = "Error during detection: ${e.message}"
-        state.wizardState.learningStatus = "Error: ${e.message}"
-        state.wizardState.readyForNextPage = false
-    }
-
-    log.info "=== Learning Process Complete ==="
+    log.info "Verification code stored (${learnedCode.length()} chars)"
 }

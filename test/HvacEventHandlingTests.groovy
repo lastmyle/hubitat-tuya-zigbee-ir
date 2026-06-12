@@ -1,14 +1,17 @@
 import org.junit.Test
 
 /**
- * Tests for HVAC event handling during wizard setup with local protocol detection
- * Tests the event-driven mechanism for IR code learning
+ * Tests for v2 HVAC event handling (app.v2.groovy)
+ *
+ * v2's codeLearnedHandler ran protocol identification against the live
+ * Maestro API every time a code arrived. v3 keeps the handler but uses
+ * it only to confirm the IR blaster is wired — see HvacV3WizardTests.
  */
 class HvacEventHandlingTests {
 
     @Test
     void testAppInitializeSubscribesToEvents() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Setup mock device
         def mockDevice = new MockIrDeviceWithEvents()
@@ -25,7 +28,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testCodeLearnedEventHandler() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Simulate learned code event with real Fujitsu code
         def mockEvent = new HvacMockEvent(value: TestCodes.FUJITSU_OFF)
@@ -42,7 +45,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testCodeLearnedEventHandlerDaikin() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Simulate learned code event with real Daikin code
         def mockEvent = new HvacMockEvent(value: TestCodes.DAIKIN_COOL_24_AUTO)
@@ -58,7 +61,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testCodeLearnedEventHandlerNoMatch() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Simulate learned code event with invalid code
         def mockEvent = new HvacMockEvent(value: "INVALID_CODE")
@@ -75,7 +78,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testCodeLearnedEventHandlerNoManufacturer() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Use real code
         def mockEvent = new HvacMockEvent(value: TestCodes.PANASONIC_COOL_20_AUTO)
@@ -91,7 +94,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testCodeLearnedEventHandlerEmptyCode() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         def mockEvent = new HvacMockEvent(value: "")
         app.codeLearnedHandler(mockEvent)
@@ -103,7 +106,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testCodeLearnedEventHandlerWithWhitespace() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Event value with newlines (as stored by driver)
         String codeWithWhitespace = TestCodes.FUJITSU_COOL_24_AUTO.replaceAll("(.{20})", "\$1\n")
@@ -117,7 +120,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testAppButtonHandlerLearnTrigger() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         def mockDevice = new MockIrDeviceWithEvents()
         app.binding.setVariable("irDevice", mockDevice)
@@ -135,7 +138,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testAppButtonHandlerLearnTriggerNoDevice() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         app.binding.setVariable("irDevice", null)
 
@@ -148,7 +151,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testAppButtonHandlerUnknownButton() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Should not crash
         app.appButtonHandler("unknownButton")
@@ -159,7 +162,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testEventHandlerExceptionHandling() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Use invalid code to trigger exception path
         def mockEvent = new HvacMockEvent(value: "NOT_VALID_BASE64!")
@@ -173,7 +176,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testMultipleCodeLearnedEvents() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // First event - OFF code
         def event1 = new HvacMockEvent(value: TestCodes.GREE_OFF)
@@ -192,7 +195,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testCodeLearnedWithDifferentProtocols() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Test Mitsubishi
         def event1 = new HvacMockEvent(value: TestCodes.MITSUBISHI_HEAT_26_HIGH)
@@ -208,7 +211,7 @@ class HvacEventHandlingTests {
 
     @Test
     void testReadyForNextPageFlag() {
-        def app = new HubitatAppFacade("app.groovy")
+        def app = new HubitatAppFacade("app.v2.groovy")
 
         // Successful detection should set readyForNextPage
         def event = new HvacMockEvent(value: TestCodes.LG_COOL_24_AUTO)
