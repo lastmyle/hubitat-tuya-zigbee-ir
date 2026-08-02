@@ -101,20 +101,21 @@ metadata {
             [name: 'Command Name (v3)*', type: 'STRING', description: 'SmartIR-native v3 command name (e.g., "COOL_HIGH_22", "OFF"). Looked up verbatim against each command\'s name_v3 field — case-sensitive, no normalisation.']
         ]
         command 'hvacRestoreState'
-        // Republish hvacModes/hvacFanModes from the stored commands. Lets the
-        // installer read a unit's supported modes without re-saving config.
-        command 'publishHvacModes'
+        // Republish the capability attributes below from the stored commands.
+        // Lets the installer back-fill a unit's capabilities without re-saving.
+        command 'publishHvacCapabilities'
 
         // Readonly HVAC Configuration Attributes
         attribute 'lastLearnedCode', 'STRING'
         attribute 'hvacModel', 'STRING'
         attribute 'hvacBrand', 'STRING'
         attribute 'hvacConfigured', 'STRING'
-        // Comma-separated lists of the modes / fan speeds the configured unit
-        // actually has, derived from the stored command names. Read by the
-        // installer so it only offers codes the device supports.
-        attribute 'hvacModes', 'STRING'
-        attribute 'hvacFanModes', 'STRING'
+        // Capabilities the configured unit actually has, derived from the
+        // stored command names so the installer only offers codes that exist.
+        attribute 'hvacModes', 'STRING'      // e.g. "heat,cool"
+        attribute 'hvacFanModes', 'STRING'   // e.g. "auto,low,high"
+        attribute 'hvacMinTemp', 'NUMBER'
+        attribute 'hvacMaxTemp', 'NUMBER'
 
         // HVAC State Attributes (for MQTT -> InfluxDB tracking)
         attribute 'hvacMode', 'ENUM', ['off', 'cool', 'heat', 'dry', 'fan', 'auto']
@@ -260,7 +261,7 @@ def setHvacConfig(final Map configJson) {
     doSendEvent(name: 'hvacModel', value: configJson.model ?: 'Unknown')
     doSendEvent(name: 'hvacBrand', value: configJson.brand ?: 'Unknown')
     doSendEvent(name: 'hvacConfigured', value: 'true')
-    publishHvacModes()
+    publishHvacCapabilities()
 
     info 'HVAC configuration saved successfully'
 }
@@ -368,7 +369,7 @@ def addHvacCommands(final List commands) {
     state.hvacConfigured = true
 
     doSendEvent(name: 'hvacConfigured', value: 'true')
-    publishHvacModes()
+    publishHvacCapabilities()
 
     info "Stored ${commands.size()} commands (${added} added, ${replaced} replaced; total: ${state.hvacCommands.size()})"
 }
@@ -390,25 +391,29 @@ Map getHvacConfig() {
 
 
 /**
- * Derive the supported modes + fan speeds from the stored command names and
- * publish them as attributes, so the installer can read what this unit has
- * without us exposing the full command list. Command names are
- * "{temp}_{mode}_{fan}" (e.g. "24_cool_auto"); specials like "power_off" are
- * ignored. Invokable via the Maker API so already-configured units can be
- * back-filled without re-saving config.
+ * Derive the unit's capabilities (modes, fan speeds, temperature range) from
+ * the stored command names and publish them as attributes, so the installer
+ * can read what this unit actually has without us exposing the full command
+ * list. Command names are "{temp}_{mode}_{fan}" (e.g. "24_cool_auto"); specials
+ * like "power_off" are skipped. Invokable via the Maker API so already-
+ * configured units can be back-filled without re-saving config.
  */
-void publishHvacModes() {
+void publishHvacCapabilities() {
     def modes = [] as LinkedHashSet
     def fans = [] as LinkedHashSet
+    def temps = []
     (state.hvacCommands ?: []).each { cmd ->
         def parts = (cmd?.name ?: '').tokenize('_')
         if (parts.size() == 3 && parts[0].isInteger()) {
+            temps << parts[0].toInteger()
             modes << parts[1]
             fans << parts[2]
         }
     }
     doSendEvent(name: 'hvacModes', value: modes.join(','))
     doSendEvent(name: 'hvacFanModes', value: fans.join(','))
+    doSendEvent(name: 'hvacMinTemp', value: temps ? temps.min() : null)
+    doSendEvent(name: 'hvacMaxTemp', value: temps ? temps.max() : null)
 }
 
 
@@ -421,6 +426,7 @@ def clearHvacConfig() {
     state.remove('hvacModel')
     state.remove('hvacBrand')
     state.remove('hvacCommands')
+    state.remove('hvacConfig')
     state.remove('hvacConfigured')
     state.remove('hvacCurrentState')
 
@@ -429,6 +435,8 @@ def clearHvacConfig() {
     doSendEvent(name: 'hvacConfigured', value: 'false')
     doSendEvent(name: 'hvacModes', value: '')
     doSendEvent(name: 'hvacFanModes', value: '')
+    doSendEvent(name: 'hvacMinTemp', value: null)
+    doSendEvent(name: 'hvacMaxTemp', value: null)
 
     info 'HVAC configuration cleared'
 }
