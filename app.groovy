@@ -45,7 +45,7 @@ preferences {
  * CONSTANTS
  */
 
-@Field static final String MAESTRO_API_URL = "https://maestro-tuya-ir.vercel.app"
+@Field static final String MAESTRO_API_URL = "https://tuya-ir.maestropower.co.nz"
 
 /*********
  * PAGES

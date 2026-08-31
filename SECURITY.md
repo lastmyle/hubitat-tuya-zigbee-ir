@@ -51,7 +51,7 @@ This means:
 
 ### External API Communication (Setup Only)
 
-The wizard app communicates with the Maestro API (`maestro-tuya-ir.vercel.app`) during initial setup only.
+The wizard app communicates with the Maestro API (`tuya-ir.maestropower.co.nz`) during initial setup only.
 
 | Property | Detail |
 |----------|--------|
