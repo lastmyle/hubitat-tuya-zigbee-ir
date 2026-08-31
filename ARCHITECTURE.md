@@ -9,7 +9,7 @@ graph TB
     subgraph "SETUP PHASE - One-time configuration"
         REMOTE[Physical HVAC Remote]
         WIZARD[HVAC Setup Wizard<br/>app.groovy]
-        MAESTRO[Maestro API<br/>maestro-tuya-ir.vercel.app]
+        MAESTRO[Maestro API<br/>tuya-ir.maestropower.co.nz]
 
         REMOTE -->|IR signal| IR1[IR Blaster]
         IR1 -->|Zigbee| DRIVER1[Driver]
