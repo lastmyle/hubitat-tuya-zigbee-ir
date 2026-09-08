@@ -83,3 +83,20 @@ Since Hubitat lacks native IR code support, the driver uses a button mapping wor
 3. **Resolve conversations**: After addressing or determining a comment is not actionable, resolve the thread via GraphQL `resolveReviewThread` mutation
 4. **Codecov failures**: If Codecov reports coverage drops or missing tests, write the missing tests and push a follow-up commit
 5. **Do not leave unresolved threads** — all conversations must be resolved for merge to proceed
+## Working alongside other sessions
+
+Several Claude sessions and git worktrees often run against this repo at once.
+The `collision-check` SessionStart hook (`.claude/hooks/collision-check.sh`)
+runs the checks for you and prints a report at the top of every session: a
+warning when it finds another worktree, another running session, or uncommitted
+work in this checkout. When it flags uncommitted changes:
+
+- **Do not commit, revert or stash changes you did not make.** You would destroy
+  another session's work. Tell the owner what you found.
+- **Move this session to its own worktree before you edit any file**, unless the
+  owner says the changes are yours to continue. Use the `worktree` skill, or run
+  `git worktree add .claude/worktrees/<name> -b <branch> origin/main` and enter it
+  with the `EnterWorktree` tool.
+- **Say which worktree you are on at the top of every reply**, with the path and
+  branch (for example: On worktree `.claude/worktrees/xero`, branch
+  `feat/xero`), so the owner does not mistake it for the main checkout.
