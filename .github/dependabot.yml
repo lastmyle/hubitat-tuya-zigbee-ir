@@ -1,5 +1,6 @@
 # Dependabot version updates. Runs weekly; minor and patch bumps share one PR
-# per ecosystem and directory, majors get their own PR.
+# per ecosystem and directory, majors get their own PR. Cooldown holds a new
+# release back for 3 days; security updates skip it.
 # Dependabot PRs cannot read Actions secrets: workflows that need one must have
 # it set under Settings > Secrets and variables > Dependabot.
 
@@ -13,9 +14,10 @@ updates:
       time: "09:00"
       timezone: "Pacific/Auckland"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3
     commit-message:
       prefix: "chore"
-      prefix-development: "chore"
       include: "scope"
     groups:
       github-actions-minor-patch:
