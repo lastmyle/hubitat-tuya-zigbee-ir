@@ -1,0 +1,24 @@
+# Dependabot version updates. Runs weekly; minor and patch bumps share one PR
+# per ecosystem and directory, majors get their own PR.
+# Dependabot PRs cannot read Actions secrets: workflows that need one must have
+# it set under Settings > Secrets and variables > Dependabot.
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Pacific/Auckland"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    groups:
+      github-actions-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
