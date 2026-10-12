@@ -1,0 +1,4 @@
+# Triaged trivy findings (see .github/workflows/security-scan.yml).
+# The scan needs this file to exist, even when nothing is ignored.
+misconfigurations: []
+vulnerabilities: []
