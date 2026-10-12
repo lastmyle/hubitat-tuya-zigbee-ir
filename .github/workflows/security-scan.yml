@@ -28,9 +28,10 @@ jobs:
     name: gitleaks (secrets)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0 # full history so the secret scan can cover every commit
+          persist-credentials: false
 
       - name: Install gitleaks
         env:
@@ -63,7 +64,9 @@ jobs:
     name: trivy (vulns + misconfig)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       # Filesystem scan: vulnerable dependencies plus IaC / Dockerfile
       # misconfiguration, CRITICAL and HIGH, fixable only. One scan writes a
